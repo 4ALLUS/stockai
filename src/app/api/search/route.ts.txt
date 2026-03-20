@@ -1,0 +1,24 @@
+import { NextRequest, NextResponse } from 'next/server'
+import yahooFinance from 'yahoo-finance2'
+
+export async function GET(req: NextRequest) {
+  const q = req.nextUrl.searchParams.get('q') ?? ''
+  if (q.length < 2) return NextResponse.json({ suggestions: [] })
+
+  try {
+    const results = await yahooFinance.search(q)
+    const suggestions = (results.quotes ?? [])
+      .filter((r: any) => r.symbol && r.shortname && r.quoteType !== 'OPTION')
+      .slice(0, 8)
+      .map((r: any) => ({
+        symbol:   r.symbol,
+        name:     r.shortname ?? r.longname ?? r.symbol,
+        exchDisp: r.exchDisp ?? r.exchange ?? '',
+        typeDisp: r.typeDisp ?? r.quoteType ?? '',
+      }))
+    return NextResponse.json({ suggestions })
+  } catch (err) {
+    console.error('[search API]', err)
+    return NextResponse.json({ suggestions: [] })
+  }
+}

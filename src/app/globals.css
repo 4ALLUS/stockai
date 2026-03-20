@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+@layer base {
+  :root {
+    --radius: 0.5rem;
+  }
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white border border-gray-200 rounded-xl p-5;
+  }
+  .btn-primary {
+    @apply bg-brand px-4 py-2 text-white text-sm font-medium rounded-lg hover:bg-brand-600 transition-colors;
+  }
+  .btn-secondary {
+    @apply border border-gray-200 px-4 py-2 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors;
+  }
+  .input {
+    @apply w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent;
+  }
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+  .badge-blue  { @apply bg-brand-50 text-brand-800; }
+  .badge-green { @apply bg-green-50 text-green-800; }
+  .badge-amber { @apply bg-amber-50 text-amber-800; }
+  .badge-red   { @apply bg-red-50 text-red-800; }
+}
