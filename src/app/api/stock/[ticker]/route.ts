@@ -2,27 +2,26 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(req: NextRequest) {
   const q = (req.nextUrl.searchParams.get('q') ?? '').trim()
-  if (q.length < 2) return NextResponse.json({ suggestions: [], debug: 'too short' })
+  if (q.length < 2) return NextResponse.json({ suggestions: [] })
 
-  const key = process.env.ALPHA_VANTAGE_KEY
-  if (!key) return NextResponse.json({ suggestions: [], debug: 'NO API KEY' })
-
-  const url = `https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=${encodeURIComponent(q)}&apikey=${key}`
-  
   try {
-    const res  = await fetch(url)
-    const text = await res.text()
-    const data = JSON.parse(text)
-    const suggestions = (data?.bestMatches ?? [])
+    const key = process.env.FINNHUB_KEY
+    const res  = await fetch(
+      `https://finnhub.io/api/v1/search?q=${encodeURIComponent(q)}&token=${key}`
+    )
+    const data = await res.json()
+    const suggestions = (data?.result ?? [])
+      .filter((r: any) => r.symbol && r.description)
       .slice(0, 8)
       .map((r: any) => ({
-        symbol:   r['1. symbol'],
-        name:     r['2. name'],
-        exchDisp: r['4. region'],
-        typeDisp: r['3. type'],
+        symbol:   r.symbol,
+        name:     r.description,
+        exchDisp: r.primaryExchange ?? '',
+        typeDisp: r.type ?? 'Equity',
       }))
-    return NextResponse.json({ suggestions, debug: `found ${suggestions.length}`, raw: text.slice(0, 100) })
-  } catch (err: any) {
-    return NextResponse.json({ suggestions: [], debug: 'ERROR: ' + err.message })
+    return NextResponse.json({ suggestions })
+  } catch (err) {
+    console.error('[search]', err)
+    return NextResponse.json({ suggestions: [] })
   }
 }
