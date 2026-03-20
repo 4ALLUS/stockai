@@ -5,7 +5,7 @@ export async function GET(req: NextRequest) {
   if (q.length < 2) return NextResponse.json({ suggestions: [] })
 
   try {
-    const key = process.env.FINNHUB_KEY
+    const key = process.env.FINNHUB_KEY ?? d6usl79r01qig545o780d6usl79r01qig545o78g
     const res  = await fetch(
       `https://finnhub.io/api/v1/search?q=${encodeURIComponent(q)}&token=${key}`
     )
