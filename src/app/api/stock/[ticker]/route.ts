@@ -8,12 +8,13 @@ export async function GET(
   const ticker = params.ticker.toUpperCase()
 
   try {
-    const [quote, summary] = await Promise.all([
-      yahooFinance.quote(ticker),
-      yahooFinance.quoteSummary(ticker, {
-        modules: ['financialData', 'defaultKeyStatistics', 'summaryDetail', 'recommendationTrend']
-      }).catch(() => null)
-    ])
+const quote: any = await (yahooFinance as any).quote(ticker)
+let summary: any = null
+try {
+  summary = await (yahooFinance as any).quoteSummary(ticker, {
+    modules: ['financialData', 'defaultKeyStatistics', 'summaryDetail', 'recommendationTrend']
+  })
+} catch {}
 
     const fin  = summary?.financialData
     const stat = summary?.defaultKeyStatistics
