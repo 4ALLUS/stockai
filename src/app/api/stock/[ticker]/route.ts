@@ -10,8 +10,7 @@ export async function GET(req: NextRequest) {
     const res  = await fetch(url)
     const data = await res.json()
     console.log('Alpha key:', process.env.ALPHA_VANTAGE_KEY ? 'present' : 'MISSING')
-console.log('Data:', JSON.stringify(data).slice(0, 200))
-
+    console.log('Data:', JSON.stringify(data).slice(0, 200))
     const suggestions = (data?.bestMatches ?? [])
       .slice(0, 8)
       .map((r: any) => ({
@@ -20,7 +19,6 @@ console.log('Data:', JSON.stringify(data).slice(0, 200))
         exchDisp: r['4. region'],
         typeDisp: r['3. type'],
       }))
-
     return NextResponse.json({ suggestions })
   } catch (err) {
     console.error('[search]', err)
