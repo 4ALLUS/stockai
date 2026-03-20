@@ -2,15 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(req: NextRequest) {
   const q = (req.nextUrl.searchParams.get('q') ?? '').trim()
-  if (q.length < 2) return NextResponse.json({ suggestions: [] })
+  if (q.length < 2) return NextResponse.json({ suggestions: [], debug: 'too short' })
 
+  const key = process.env.ALPHA_VANTAGE_KEY
+  if (!key) return NextResponse.json({ suggestions: [], debug: 'NO API KEY' })
+
+  const url = `https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=${encodeURIComponent(q)}&apikey=${key}`
+  
   try {
-    const key = process.env.ALPHA_VANTAGE_KEY
-    const url = `https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=${encodeURIComponent(q)}&apikey=${key}`
     const res  = await fetch(url)
-    const data = await res.json()
-    console.log('Alpha key:', process.env.ALPHA_VANTAGE_KEY ? 'present' : 'MISSING')
-    console.log('Data:', JSON.stringify(data).slice(0, 200))
+    const text = await res.text()
+    const data = JSON.parse(text)
     const suggestions = (data?.bestMatches ?? [])
       .slice(0, 8)
       .map((r: any) => ({
@@ -19,9 +21,8 @@ export async function GET(req: NextRequest) {
         exchDisp: r['4. region'],
         typeDisp: r['3. type'],
       }))
-    return NextResponse.json({ suggestions })
-  } catch (err) {
-    console.error('[search]', err)
-    return NextResponse.json({ suggestions: [] })
+    return NextResponse.json({ suggestions, debug: `found ${suggestions.length}`, raw: text.slice(0, 100) })
+  } catch (err: any) {
+    return NextResponse.json({ suggestions: [], debug: 'ERROR: ' + err.message })
   }
 }
