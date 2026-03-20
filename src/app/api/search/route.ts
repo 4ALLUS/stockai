@@ -6,8 +6,9 @@ export async function GET(req: NextRequest) {
   if (q.length < 2) return NextResponse.json({ suggestions: [] })
 
   try {
-    const results = await yahooFinance.search(q, { newsCount: 0 })
-    const suggestions = (results.quotes ?? [])
+    const results: any = await yahooFinance.search(q, { newsCount: 0 } as any)
+    const quotes = results?.quotes ?? results?.results ?? []
+    const suggestions = quotes
       .filter((r: any) => r.symbol && (r.shortname || r.longname) && r.quoteType !== 'OPTION')
       .slice(0, 8)
       .map((r: any) => ({
