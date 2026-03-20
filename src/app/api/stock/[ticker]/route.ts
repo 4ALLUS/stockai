@@ -9,6 +9,8 @@ export async function GET(req: NextRequest) {
     const url = `https://www.alphavantage.co/query?function=SYMBOL_SEARCH&keywords=${encodeURIComponent(q)}&apikey=${key}`
     const res  = await fetch(url)
     const data = await res.json()
+    console.log('Alpha key:', process.env.ALPHA_VANTAGE_KEY ? 'present' : 'MISSING')
+console.log('Data:', JSON.stringify(data).slice(0, 200))
 
     const suggestions = (data?.bestMatches ?? [])
       .slice(0, 8)
