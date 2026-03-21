@@ -95,4 +95,18 @@ export async function GET(
       eps:            overview?.EPS ?? 'N/A',
       beta:           overview?.Beta ? parseFloat(overview.Beta).toFixed(2) : 'N/A',
       week52High:     parseFloat(overview?.['52WeekHigh'] ?? '0') || meta.fiftyTwoWeekHigh || 0,
-      week52Low:      parseFloat(overview?.['52WeekLow'] ?? '0')  || meta.fiftyTwoWee
+      
+      week52Low:      parseFloat(overview?.['52WeekLow'] ?? '0')  || meta.fiftyTwoWeekLow  || 0,
+      volume:         volume ? (volume/1e6).toFixed(1)+'M' : 'N/A',
+      analystTarget,
+      recommendation: rec,
+      aiSummary,
+      analysts:       isStock ? { strongBuy, buy, hold, sell, strongSell, bullPct } : null,
+      fearGreed:      isCrypto ? { value: fngValue, label: fngLabel } : null,
+    })
+
+  } catch (err) {
+    console.error('[stock API]', err)
+    return NextResponse.json({ error: `Ticker "${ticker}" not found` }, { status: 404 })
+  }
+}
