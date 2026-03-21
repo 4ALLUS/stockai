@@ -32,7 +32,8 @@ export default function CandlestickChart({ history }: { history: HistoryPoint[] 
         const textColor = isDark ? '#888' : '#999'
         const gridColor = isDark ? '#2a2a2a' : '#f0f0f0'
 
-        const chart: any = LW.createChart(chartRef.current, {
+        // v5 API
+        const chart = LW.createChart(chartRef.current, {
           width:  chartRef.current.clientWidth,
           height: 300,
           layout: {
@@ -51,7 +52,8 @@ export default function CandlestickChart({ history }: { history: HistoryPoint[] 
 
         chartInstance.current = chart
 
-        const candleSeries = chart.addCandlestickSeries({
+        // v5: usare createSeriesMarkers o CandlestickSeries class
+        const candleSeries = chart.addSeries(LW.CandlestickSeries, {
           upColor:         '#22c55e',
           downColor:       '#ef4444',
           borderUpColor:   '#22c55e',
@@ -75,7 +77,9 @@ export default function CandlestickChart({ history }: { history: HistoryPoint[] 
           }
         }
         if (ma50Data.length > 0) {
-          const ma50Series = chart.addLineSeries({ color: '#f59e0b', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+          const ma50Series = chart.addSeries(LW.LineSeries, {
+            color: '#f59e0b', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false
+          })
           ma50Series.setData(ma50Data)
         }
 
@@ -88,12 +92,14 @@ export default function CandlestickChart({ history }: { history: HistoryPoint[] 
           }
         }
         if (ma200Data.length > 0) {
-          const ma200Series = chart.addLineSeries({ color: '#ef4444', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+          const ma200Series = chart.addSeries(LW.LineSeries, {
+            color: '#ef4444', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false
+          })
           ma200Series.setData(ma200Data)
         }
 
         // Volume
-        const volSeries = chart.addHistogramSeries({
+        const volSeries = chart.addSeries(LW.HistogramSeries, {
           color: '#e5e7eb',
           priceFormat: { type: 'volume' as any },
           priceScaleId: 'vol',
