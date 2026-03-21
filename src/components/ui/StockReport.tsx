@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { Download, Plus, TrendingUp, TrendingDown } from 'lucide-react'
+import { Download, Plus, TrendingUp, TrendingDown, Check } from 'lucide-react'
 import { MetricCard } from './MetricCard'
 import dynamic from 'next/dynamic'
 
@@ -64,15 +64,18 @@ const ASSET_LABELS: Record<string, string> = {
 }
 
 export function StockReport({ ticker }: { ticker: string }) {
-  const decodedTicker             = decodeURIComponent(ticker)
-  const [data, setData]           = useState<StockData | null>(null)
-  const [loading, setLoading]     = useState(true)
-  const [error, setError]         = useState('')
+  const decodedTicker               = decodeURIComponent(ticker)
+  const [data, setData]             = useState<StockData | null>(null)
+  const [loading, setLoading]       = useState(true)
+  const [error, setError]           = useState('')
   const [pdfLoading, setPdfLoading] = useState(false)
+  const [watchlistLoading, setWatchlistLoading] = useState(false)
+  const [watchlisted, setWatchlisted]           = useState(false)
 
   useEffect(() => {
     setLoading(true)
     setError('')
+    setWatchlisted(false)
     fetch(`/api/stock/${encodeURIComponent(decodedTicker)}`)
       .then(r => r.json())
       .then(d => {
@@ -104,6 +107,30 @@ export function StockReport({ ticker }: { ticker: string }) {
       alert('PDF generation failed: ' + e.message)
     } finally {
       setPdfLoading(false)
+    }
+  }
+
+  const handleWatchlist = async () => {
+    if (!data) return
+    setWatchlistLoading(true)
+    try {
+      const res = await fetch('/api/watchlist', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          ticker:    decodedTicker,
+          name:      data.name,
+          price,
+          change,
+          changePct,
+        }),
+      })
+      if (res.ok) setWatchlisted(true)
+      else alert('Please sign in to add to watchlist')
+    } catch {
+      alert('Error saving to watchlist')
+    } finally {
+      setWatchlistLoading(false)
     }
   }
 
@@ -184,8 +211,17 @@ export function StockReport({ ticker }: { ticker: string }) {
             <Download size={14}/>
             {pdfLoading ? 'Generating...' : 'Download PDF'}
           </button>
-          <button className="btn-primary flex items-center gap-2">
-            <Plus size={14}/> Add to portfolio
+          <button
+            onClick={handleWatchlist}
+            disabled={watchlistLoading || watchlisted}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              watchlisted
+                ? 'bg-green-100 text-green-700 border border-green-200'
+                : 'btn-primary'
+            }`}
+          >
+            {watchlisted ? <Check size={14}/> : <Plus size={14}/>}
+            {watchlistLoading ? 'Saving...' : watchlisted ? 'Saved to watchlist' : 'Add to watchlist'}
           </button>
         </div>
       </div>
@@ -276,11 +312,11 @@ export function StockReport({ ticker }: { ticker: string }) {
               <div className="flex-1">
                 <div className="flex gap-2 h-20 items-end mb-1">
                   {[
-                    { label: 'S.Buy', val: sb,  color: 'bg-green-700' },
-                    { label: 'Buy',   val: b,   color: 'bg-green-400' },
-                    { label: 'Hold',  val: h,   color: 'bg-gray-300'  },
-                    { label: 'Sell',  val: s,   color: 'bg-red-400'   },
-                    { label: 'S.Sell',val: ss,  color: 'bg-red-700'   },
+                    { label: 'S.Buy', val: sb, color: 'bg-green-700' },
+                    { label: 'Buy',   val: b,  color: 'bg-green-400' },
+                    { label: 'Hold',  val: h,  color: 'bg-gray-300'  },
+                    { label: 'Sell',  val: s,  color: 'bg-red-400'   },
+                    { label: 'S.Sell',val: ss, color: 'bg-red-700'   },
                   ].map(bar => (
                     <div key={bar.label} className="flex-1 flex flex-col items-center gap-1">
                       <span className="text-[10px] text-gray-500 font-medium">{bar.val}</span>
