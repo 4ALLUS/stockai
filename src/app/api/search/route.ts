@@ -16,20 +16,20 @@ const CRYPTO_MAP: Record<string, { symbol: string; name: string }> = {
 }
 
 const INDEX_MAP: Record<string, { symbol: string; name: string }> = {
-  'sp500':    { symbol: '^GSPC',      name: 'S&P 500' },
-  's&p':      { symbol: '^GSPC',      name: 'S&P 500' },
-  'nasdaq':   { symbol: '^IXIC',      name: 'NASDAQ Composite' },
-  'dow':      { symbol: '^DJI',       name: 'Dow Jones' },
-  'russell':  { symbol: '^RUT',       name: 'Russell 2000' },
-  'ftse':     { symbol: '^FTSE',      name: 'FTSE 100' },
-  'dax':      { symbol: '^GDAXI',     name: 'DAX' },
-  'mib':      { symbol: 'FTSEMIB.MI', name: 'FTSE MIB (Italy)' },
-  'italy':    { symbol: 'FTSEMIB.MI', name: 'FTSE MIB (Italy)' },
-  'vix':      { symbol: '^VIX',       name: 'VIX Volatility Index' },
-  'nikkei':   { symbol: '^N225',      name: 'Nikkei 225' },
-  'hangseng': { symbol: '^HSI',       name: 'Hang Seng' },
-  'cac':      { symbol: '^FCHI',      name: 'CAC 40' },
-  'ibex':     { symbol: '^IBEX',      name: 'IBEX 35' },
+  'sp500':     { symbol: '^GSPC',      name: 'S&P 500' },
+  'sp':        { symbol: '^GSPC',      name: 'S&P 500' },
+  'nasdaq':    { symbol: '^IXIC',      name: 'NASDAQ Composite' },
+  'dow':       { symbol: '^DJI',       name: 'Dow Jones' },
+  'russell':   { symbol: '^RUT',       name: 'Russell 2000' },
+  'ftse':      { symbol: '^FTSE',      name: 'FTSE 100' },
+  'dax':       { symbol: '^GDAXI',     name: 'DAX' },
+  'mib':       { symbol: 'FTSEMIB.MI', name: 'FTSE MIB (Italy)' },
+  'italy':     { symbol: 'FTSEMIB.MI', name: 'FTSE MIB (Italy)' },
+  'vix':       { symbol: '^VIX',       name: 'VIX Volatility Index' },
+  'nikkei':    { symbol: '^N225',      name: 'Nikkei 225' },
+  'hangseng':  { symbol: '^HSI',       name: 'Hang Seng' },
+  'cac':       { symbol: '^FCHI',      name: 'CAC 40' },
+  'ibex':      { symbol: '^IBEX',      name: 'IBEX 35' },
 }
 
 const COMMODITY_MAP: Record<string, { symbol: string; name: string }> = {
@@ -62,24 +62,23 @@ const FOREX_MAP: Record<string, { symbol: string; name: string }> = {
   'audusd':    { symbol: 'AUDUSD=X', name: 'AUD/USD' },
   'usdcad':    { symbol: 'CAD=X',    name: 'USD/CAD' },
   'eurgbp':    { symbol: 'EURGBP=X', name: 'EUR/GBP' },
-  'eurusd':    { symbol: 'EURUSD=X', name: 'EUR/USD' },
   'dollar':    { symbol: 'DX-Y.NYB', name: 'US Dollar Index' },
   'dollaro':   { symbol: 'DX-Y.NYB', name: 'US Dollar Index' },
 }
 
 const ETF_MAP: Record<string, { symbol: string; name: string }> = {
-  'spy':     { symbol: 'SPY',  name: 'SPDR S&P 500 ETF' },
-  'qqq':     { symbol: 'QQQ',  name: 'Invesco NASDAQ 100 ETF' },
-  'vwce':    { symbol: 'VWCE.DE', name: 'Vanguard FTSE All-World ETF' },
-  'vanguard':{ symbol: 'VTI',  name: 'Vanguard Total Stock Market ETF' },
-  'ark':     { symbol: 'ARKK', name: 'ARK Innovation ETF' },
-  'gld':     { symbol: 'GLD',  name: 'SPDR Gold Shares ETF' },
-  'iwm':     { symbol: 'IWM',  name: 'iShares Russell 2000 ETF' },
-  'eem':     { symbol: 'EEM',  name: 'iShares MSCI Emerging Markets ETF' },
-  'tlt':     { symbol: 'TLT',  name: 'iShares 20+ Year Treasury Bond ETF' },
-  'xsp':     { symbol: 'CSPX.L', name: 'iShares Core S&P 500 ETF' },
-  'msci':    { symbol: 'URTH', name: 'iShares MSCI World ETF' },
-  'world':   { symbol: 'URTH', name: 'iShares MSCI World ETF' },
+  'spy':      { symbol: 'SPY',     name: 'SPDR S&P 500 ETF' },
+  'qqq':      { symbol: 'QQQ',     name: 'Invesco NASDAQ 100 ETF' },
+  'vwce':     { symbol: 'VWCE.DE', name: 'Vanguard FTSE All-World ETF' },
+  'vanguard': { symbol: 'VTI',     name: 'Vanguard Total Stock Market ETF' },
+  'ark':      { symbol: 'ARKK',    name: 'ARK Innovation ETF' },
+  'gld':      { symbol: 'GLD',     name: 'SPDR Gold Shares ETF' },
+  'iwm':      { symbol: 'IWM',     name: 'iShares Russell 2000 ETF' },
+  'eem':      { symbol: 'EEM',     name: 'iShares MSCI Emerging Markets ETF' },
+  'tlt':      { symbol: 'TLT',     name: 'iShares 20+ Year Treasury Bond ETF' },
+  'xsp':      { symbol: 'CSPX.L', name: 'iShares Core S&P 500 ETF' },
+  'msci':     { symbol: 'URTH',   name: 'iShares MSCI World ETF' },
+  'world':    { symbol: 'URTH',   name: 'iShares MSCI World ETF' },
 }
 
 export async function GET(req: NextRequest) {
@@ -106,7 +105,6 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // Finnhub for stocks
   try {
     const res  = await fetch(
       `https://finnhub.io/api/v1/search?q=${encodeURIComponent(q)}&token=d6usl79r01qig545o780d6usl79r01qig545o78g`
