@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { Download, Plus, TrendingUp, TrendingDown, Check } from 'lucide-react'
 import { MetricCard } from './MetricCard'
 import dynamic from 'next/dynamic'
+import { createClient } from '@supabase/supabase-js'
 
 const CandlestickChart = dynamic(() => import('./CandlestickChart'), { ssr: false })
 
@@ -63,6 +64,11 @@ const ASSET_LABELS: Record<string, string> = {
   index:     'Market Index',
 }
 
+const supabaseClient = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
 export function StockReport({ ticker }: { ticker: string }) {
   const decodedTicker               = decodeURIComponent(ticker)
   const [data, setData]             = useState<StockData | null>(null)
@@ -114,10 +120,22 @@ export function StockReport({ ticker }: { ticker: string }) {
     if (!data) return
     setWatchlistLoading(true)
     try {
+      const { data: { session } } = await supabaseClient.auth.getSession()
+      const token = session?.access_token ?? ''
+
+      if (!token) {
+        alert('Please sign in to add to watchlist')
+        setWatchlistLoading(false)
+        return
+      }
+
       const res = await fetch('/api/watchlist', {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
           ticker:    decodedTicker,
           name:      data.name,
           price,
@@ -125,8 +143,12 @@ export function StockReport({ ticker }: { ticker: string }) {
           changePct,
         }),
       })
+
       if (res.ok) setWatchlisted(true)
-      else alert('Please sign in to add to watchlist')
+      else {
+        const err = await res.json()
+        alert('Error: ' + (err.error ?? 'Unknown error'))
+      }
     } catch {
       alert('Error saving to watchlist')
     } finally {
@@ -221,7 +243,7 @@ export function StockReport({ ticker }: { ticker: string }) {
             }`}
           >
             {watchlisted ? <Check size={14}/> : <Plus size={14}/>}
-            {watchlistLoading ? 'Saving...' : watchlisted ? 'Saved to watchlist' : 'Add to watchlist'}
+            {watchlistLoading ? 'Saving...' : watchlisted ? 'Saved ✓' : 'Add to watchlist'}
           </button>
         </div>
       </div>
@@ -282,7 +304,6 @@ export function StockReport({ ticker }: { ticker: string }) {
           <div className="card mb-5">
             <p className="text-sm font-medium text-gray-500 mb-4">Analyst consensus</p>
 
-            {/* Sentiment bar */}
             {total > 0 && (
               <div className="mb-5">
                 <div className="flex rounded-full overflow-hidden h-5 mb-2">
@@ -307,7 +328,6 @@ export function StockReport({ ticker }: { ticker: string }) {
               </div>
             )}
 
-            {/* Bars + consensus box */}
             <div className="flex items-end gap-4">
               <div className="flex-1">
                 <div className="flex gap-2 h-20 items-end mb-1">
@@ -344,7 +364,7 @@ export function StockReport({ ticker }: { ticker: string }) {
             </div>
           </div>
 
-          {/* Statistical projections */}
+          {/* Projections */}
           {projections.length > 0 && (
             <div className="card mb-5">
               <p className="text-sm font-medium text-gray-500 mb-4">Statistical projections — based on analyst target</p>
