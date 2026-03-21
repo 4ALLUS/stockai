@@ -1,10 +1,17 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Download, Plus, TrendingUp, TrendingDown } from 'lucide-react'
 import { MetricCard } from './MetricCard'
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 
-interface HistoryPoint { date: string; price: number }
+interface HistoryPoint {
+  date: string
+  price: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+}
 
 interface StockData {
   ticker: string
@@ -53,20 +60,127 @@ const ASSET_LABELS: Record<string, string> = {
   index:     'Market Index',
 }
 
-function buildChartData(history: HistoryPoint[], ma50: number | null, ma200: number | null) {
-  if (!history || history.length === 0) return []
-  const n = history.length
-  return history.map((h, i) => {
-    const slice = history.slice(0, i + 1).map(x => x.price)
-    const ma50v  = i >= 49  ? parseFloat((slice.slice(-50).reduce((a,b)=>a+b,0)/50).toFixed(4))  : null
-    const ma200v = i >= 199 ? parseFloat((slice.slice(-200).reduce((a,b)=>a+b,0)/200).toFixed(4)) : null
-    return {
-      date:  h.date.slice(5),
-      price: h.price,
-      ma50:  ma50v,
-      ma200: ma200v,
+function CandlestickChart({ history, ma50, ma200 }: { history: HistoryPoint[], ma50: number | null, ma200: number | null }) {
+  const chartRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!chartRef.current || !history.length) return
+
+    let chart: any = null
+
+    const init = async () => {
+      const { createChart, ColorType, CrosshairMode } = await import('lightweight-charts')
+
+      chart = createChart(chartRef.current!, {
+        width:  chartRef.current!.clientWidth,
+        height: 280,
+        layout: {
+          background: { type: ColorType.Solid, color: 'transparent' },
+          textColor: '#888',
+        },
+        grid: {
+          vertLines: { color: '#f0f0f0' },
+          horzLines: { color: '#f0f0f0' },
+        },
+        crosshair: { mode: CrosshairMode.Normal },
+        rightPriceScale: { borderVisible: false },
+        timeScale: { borderVisible: false, timeVisible: true },
+        handleScroll: true,
+        handleScale: true,
+      })
+
+      // Candlestick series
+      const candleSeries = chart.addCandlestickSeries({
+        upColor:   '#22c55e',
+        downColor: '#ef4444',
+        borderUpColor:   '#22c55e',
+        borderDownColor: '#ef4444',
+        wickUpColor:   '#22c55e',
+        wickDownColor: '#ef4444',
+      })
+
+      const candleData = history
+        .filter(h => h.open && h.high && h.low && h.close)
+        .map(h => ({
+          time:  h.date,
+          open:  h.open,
+          high:  h.high,
+          low:   h.low,
+          close: h.close,
+        }))
+
+      candleSeries.setData(candleData)
+
+      // MA50 line
+      if (history.length >= 50) {
+        const ma50Series = chart.addLineSeries({
+          color: '#f59e0b',
+          lineWidth: 1,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        })
+        const ma50Data = history.map((h, i) => {
+          const slice = history.slice(Math.max(0, i-49), i+1).map(x => x.close).filter(Boolean)
+          if (slice.length < 50) return null
+          return { time: h.date, value: parseFloat((slice.reduce((a,b)=>a+b,0)/slice.length).toFixed(4)) }
+        }).filter(Boolean)
+        ma50Series.setData(ma50Data as any)
+      }
+
+      // MA200 line
+      if (history.length >= 200) {
+        const ma200Series = chart.addLineSeries({
+          color: '#ef4444',
+          lineWidth: 1,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        })
+        const ma200Data = history.map((h, i) => {
+          const slice = history.slice(Math.max(0, i-199), i+1).map(x => x.close).filter(Boolean)
+          if (slice.length < 200) return null
+          return { time: h.date, value: parseFloat((slice.reduce((a,b)=>a+b,0)/slice.length).toFixed(4)) }
+        }).filter(Boolean)
+        ma200Series.setData(ma200Data as any)
+      }
+
+      // Volume histogram
+      const volumeSeries = chart.addHistogramSeries({
+        color: '#e5e7eb',
+        priceFormat: { type: 'volume' },
+        priceScaleId: 'volume',
+        scaleMargins: { top: 0.85, bottom: 0 },
+      })
+      const volumeData = history
+        .filter(h => h.volume != null)
+        .map(h => ({
+          time:  h.date,
+          value: h.volume,
+          color: h.close >= h.open ? '#bbf7d0' : '#fecaca',
+        }))
+      volumeSeries.setData(volumeData)
+
+      chart.timeScale().fitContent()
     }
-  }).filter((_, i) => i % Math.max(1, Math.floor(n / 120)) === 0)
+
+    init()
+
+    return () => { if (chart) chart.remove() }
+  }, [history])
+
+  return (
+    <div>
+      <div className="flex items-center gap-4 mb-2 text-xs text-gray-400">
+        <span className="flex items-center gap-1"><span className="w-3 h-2 bg-green-500 inline-block rounded-sm"></span>Bullish</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-2 bg-red-500 inline-block rounded-sm"></span>Bearish</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-amber-400 inline-block"></span>MA50</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-red-400 inline-block"></span>MA200</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-2 bg-gray-200 inline-block rounded-sm"></span>Volume</span>
+      </div>
+      <div ref={chartRef} style={{ width: '100%', height: 280 }} />
+    </div>
+  )
 }
 
 export function StockReport({ ticker }: { ticker: string }) {
@@ -120,7 +234,6 @@ export function StockReport({ ticker }: { ticker: string }) {
   const assetType = getAssetType(decodedTicker)
   const isStock   = assetType === 'stock'
   const isCrypto  = assetType === 'crypto'
-  const chartData = buildChartData(data.history ?? [], data.ma50 ?? null, data.ma200 ?? null)
 
   return (
     <div>
@@ -161,32 +274,13 @@ export function StockReport({ ticker }: { ticker: string }) {
         <MetricCard label="Analyst target" value={isStock && target ? `$${safe(target)}` : 'N/A'} subColor="green" />
       </div>
 
-      {/* Price Chart */}
-      {chartData.length > 0 && (
+      {/* Candlestick Chart */}
+      {data.history && data.history.length > 0 && (
         <div className="card mb-5">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-gray-500">Price chart — 1 year</p>
-            <div className="flex gap-4 text-xs text-gray-400">
-              <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-brand-400 inline-block"></span>Price</span>
-              <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-amber-400 inline-block"></span>MA50</span>
-              <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-red-400 inline-block"></span>MA200</span>
-            </div>
+            <p className="text-sm font-medium text-gray-500">Price chart — 1 year · candlestick + volume</p>
           </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 10 }}>
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-              <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} domain={['auto', 'auto']} width={55}
-                tickFormatter={(v) => `$${v.toFixed(price < 10 ? 3 : price < 100 ? 1 : 0)}`} />
-              <Tooltip
-                formatter={(value: any, name: string) => [`$${parseFloat(value).toFixed(price < 10 ? 4 : 2)}`, name]}
-                labelStyle={{ fontSize: 11 }}
-                contentStyle={{ fontSize: 11, borderRadius: 8, border: '0.5px solid #e5e7eb' }}
-              />
-              <Line type="monotone" dataKey="price" stroke="#378add" strokeWidth={1.5} dot={false} name="Price" />
-              <Line type="monotone" dataKey="ma50"  stroke="#f59e0b" strokeWidth={1} dot={false} name="MA50" strokeDasharray="4 2" />
-              <Line type="monotone" dataKey="ma200" stroke="#ef4444" strokeWidth={1} dot={false} name="MA200" strokeDasharray="4 2" />
-            </LineChart>
-          </ResponsiveContainer>
+          <CandlestickChart history={data.history} ma50={data.ma50 ?? null} ma200={data.ma200 ?? null} />
         </div>
       )}
 
