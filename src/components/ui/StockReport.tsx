@@ -140,16 +140,25 @@ export function StockReport({ ticker }: { ticker: string }) {
   const isStock   = assetType === 'stock'
   const isCrypto  = assetType === 'crypto'
 
-  const sb    = data.analysts?.strongBuy ?? 0
-  const b     = data.analysts?.buy ?? 0
-  const h     = data.analysts?.hold ?? 0
-  const s     = data.analysts?.sell ?? 0
-  const ss    = data.analysts?.strongSell ?? 0
-  const total = sb + b + h + s + ss
+  const sb      = data.analysts?.strongBuy ?? 0
+  const b       = data.analysts?.buy ?? 0
+  const h       = data.analysts?.hold ?? 0
+  const s       = data.analysts?.sell ?? 0
+  const ss      = data.analysts?.strongSell ?? 0
+  const total   = sb + b + h + s + ss
   const bullPct = total > 0 ? Math.round((sb+b)/total*100) : 0
   const neutPct = total > 0 ? Math.round(h/total*100) : 0
   const bearPct = 100 - bullPct - neutPct
   const maxBar  = Math.max(sb, b, h, s, ss, 1)
+
+  const projections = target > 0 ? [
+    { period: '+1 month',   value: price + (target-price)*0.08 },
+    { period: '+3 months',  value: price + (target-price)*0.25 },
+    { period: '+6 months',  value: price + (target-price)*0.55 },
+    { period: '+12 months', value: target },
+  ] : []
+
+  const maxUpside = target > 0 ? Math.abs((target - price) / price * 100) : 1
 
   return (
     <div>
@@ -171,11 +180,7 @@ export function StockReport({ ticker }: { ticker: string }) {
           <p className="text-xs text-gray-400 mt-1">Source: Yahoo Finance + Alpha Vantage · verified · no AI-generated numbers</p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={handlePDF}
-            disabled={pdfLoading}
-            className="btn-secondary flex items-center gap-2"
-          >
+          <button onClick={handlePDF} disabled={pdfLoading} className="btn-secondary flex items-center gap-2">
             <Download size={14}/>
             {pdfLoading ? 'Generating...' : 'Download PDF'}
           </button>
@@ -205,11 +210,11 @@ export function StockReport({ ticker }: { ticker: string }) {
         </div>
       )}
 
-      {/* 52W Range Gauge */}
+      {/* 52W Gauge */}
       {high52 > 0 && low52 > 0 && (
         <div className="card mb-5">
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-3">52-week range</p>
-          <div className="relative h-4 rounded-full mb-4 overflow-hidden" style={{
+          <div className="relative h-4 rounded-full mb-3 overflow-hidden" style={{
             background: 'linear-gradient(to right, #dc2626, #f59e0b, #16a34a)'
           }}>
             <div
@@ -217,7 +222,7 @@ export function StockReport({ ticker }: { ticker: string }) {
               style={{ left: `${Math.min(Math.max(rangePct, 2), 98)}%` }}
             />
           </div>
-          <div className="flex justify-between text-xs mt-1">
+          <div className="flex justify-between text-xs">
             <span className="text-red-500 font-medium">Low ${safe(low52)}</span>
             <span className="font-semibold text-gray-700">Current ${safe(price)}</span>
             <span className="text-green-600 font-medium">High ${safe(high52)}</span>
@@ -234,77 +239,122 @@ export function StockReport({ ticker }: { ticker: string }) {
         <p className="text-sm text-gray-700 leading-relaxed">{data.aiSummary}</p>
       </div>
 
-      {/* Analyst Consensus / Fear&Greed / Trend */}
+      {/* Consensus / Fear&Greed / Trend */}
       {isStock ? (
-        <div className="card">
-          <p className="text-sm font-medium text-gray-500 mb-4">Analyst consensus</p>
+        <>
+          {/* Analyst consensus */}
+          <div className="card mb-5">
+            <p className="text-sm font-medium text-gray-500 mb-4">Analyst consensus</p>
 
-          {/* Sentiment bar */}
-          {total > 0 && (
-            <div className="mb-5">
-              <div className="flex rounded-full overflow-hidden h-5 mb-2">
-                <div className="bg-green-600 flex items-center justify-center text-white text-[10px] font-medium transition-all"
-                  style={{ width: `${bullPct}%` }}>
-                  {bullPct > 10 ? `${bullPct}%` : ''}
+            {/* Sentiment bar */}
+            {total > 0 && (
+              <div className="mb-5">
+                <div className="flex rounded-full overflow-hidden h-5 mb-2">
+                  <div className="bg-green-600 flex items-center justify-center text-white text-[10px] font-medium"
+                    style={{ width: `${bullPct}%` }}>
+                    {bullPct > 10 ? `${bullPct}%` : ''}
+                  </div>
+                  <div className="bg-gray-300 flex items-center justify-center text-gray-600 text-[10px] font-medium"
+                    style={{ width: `${neutPct}%` }}>
+                    {neutPct > 10 ? `${neutPct}%` : ''}
+                  </div>
+                  <div className="bg-red-500 flex items-center justify-center text-white text-[10px] font-medium"
+                    style={{ width: `${Math.max(bearPct, 0)}%` }}>
+                    {bearPct > 10 ? `${bearPct}%` : ''}
+                  </div>
                 </div>
-                <div className="bg-gray-300 flex items-center justify-center text-gray-600 text-[10px] font-medium transition-all"
-                  style={{ width: `${neutPct}%` }}>
-                  {neutPct > 10 ? `${neutPct}%` : ''}
-                </div>
-                <div className="bg-red-500 flex items-center justify-center text-white text-[10px] font-medium transition-all"
-                  style={{ width: `${bearPct}%` }}>
-                  {bearPct > 10 ? `${bearPct}%` : ''}
+                <div className="flex justify-between text-xs">
+                  <span className="text-green-600 font-medium">Bullish {bullPct}%</span>
+                  <span className="text-gray-400">Neutral {neutPct}%</span>
+                  <span className="text-red-500 font-medium">Bearish {bearPct}%</span>
                 </div>
               </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-green-600 font-medium">Bullish {bullPct}%</span>
-                <span className="text-gray-400">Neutral {neutPct}%</span>
-                <span className="text-red-500 font-medium">Bearish {bearPct}%</span>
+            )}
+
+            {/* Bars + consensus box */}
+            <div className="flex items-end gap-4">
+              <div className="flex-1">
+                <div className="flex gap-2 h-20 items-end mb-1">
+                  {[
+                    { label: 'S.Buy', val: sb,  color: 'bg-green-700' },
+                    { label: 'Buy',   val: b,   color: 'bg-green-400' },
+                    { label: 'Hold',  val: h,   color: 'bg-gray-300'  },
+                    { label: 'Sell',  val: s,   color: 'bg-red-400'   },
+                    { label: 'S.Sell',val: ss,  color: 'bg-red-700'   },
+                  ].map(bar => (
+                    <div key={bar.label} className="flex-1 flex flex-col items-center gap-1">
+                      <span className="text-[10px] text-gray-500 font-medium">{bar.val}</span>
+                      <div className={`w-full rounded-t-sm ${bar.color}`}
+                        style={{ height: `${(bar.val/maxBar)*64}px` }} />
+                      <span className="text-[9px] text-gray-400">{bar.label}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
+              <div className="text-center bg-gray-50 rounded-xl px-5 py-3 min-w-[110px]">
+                <p className={`text-2xl font-bold ${
+                  data.recommendation === 'Buy'  ? 'text-green-600' :
+                  data.recommendation === 'Sell' ? 'text-red-600'   : 'text-gray-700'
+                }`}>{data.recommendation}</p>
+                <p className="text-xs text-gray-400 mb-1">Consensus</p>
+                <p className="text-base font-semibold text-gray-800">${safe(target)}</p>
+                <p className="text-xs text-gray-400">Mean target</p>
+                {upside !== 'N/A' && (
+                  <p className={`text-xs font-medium mt-1 ${parseFloat(upside) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {parseFloat(upside) >= 0 ? '+' : ''}{upside}% upside
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Statistical projections */}
+          {projections.length > 0 && (
+            <div className="card mb-5">
+              <p className="text-sm font-medium text-gray-500 mb-4">Statistical projections — based on analyst target</p>
+              <div className="space-y-3">
+                {projections.map(p => {
+                  const pct  = ((p.value - price) / price * 100)
+                  const bull = pct >= 0
+                  const barW = Math.min(Math.abs(pct) / maxUpside * 100, 100)
+                  return (
+                    <div key={p.period} className="flex items-center gap-3">
+                      <span className="text-xs text-gray-400 w-20 shrink-0">{p.period}</span>
+                      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full ${bull ? 'bg-green-500' : 'bg-red-500'}`}
+                          style={{ width: `${barW}%` }} />
+                      </div>
+                      <span className="text-sm font-semibold text-gray-800 w-16 text-right">${p.value.toFixed(2)}</span>
+                      <span className={`text-xs font-medium w-14 text-right ${bull ? 'text-green-600' : 'text-red-600'}`}>
+                        {bull ? '+' : ''}{pct.toFixed(1)}%
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-3">Based on analyst consensus target. Not a guaranteed forecast.</p>
             </div>
           )}
 
-          {/* Analyst bars + consensus */}
-          <div className="flex items-end gap-4">
-            {/* Bars */}
-            <div className="flex-1">
-              <div className="flex gap-2 h-20 items-end mb-1">
-                {[
-                  { label: 'S.Buy', val: sb,  color: 'bg-green-700' },
-                  { label: 'Buy',   val: b,   color: 'bg-green-400' },
-                  { label: 'Hold',  val: h,   color: 'bg-gray-300'  },
-                  { label: 'Sell',  val: s,   color: 'bg-red-400'   },
-                  { label: 'S.Sell',val: ss,  color: 'bg-red-700'   },
-                ].map(bar => (
-                  <div key={bar.label} className="flex-1 flex flex-col items-center gap-1">
-                    <span className="text-[10px] text-gray-500 font-medium">{bar.val}</span>
-                    <div
-                      className={`w-full rounded-t-sm ${bar.color} transition-all`}
-                      style={{ height: `${(bar.val / maxBar) * 64}px` }}
-                    />
-                    <span className="text-[9px] text-gray-400">{bar.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Consensus box */}
-            <div className="text-center bg-gray-50 rounded-xl px-5 py-3 min-w-[110px]">
-              <p className={`text-2xl font-bold ${
+          {/* Verdict */}
+          <div className="card border-l-4 border-amber-400 bg-amber-50">
+            <p className="text-sm font-bold text-amber-800 mb-2">Verdict — {decodedTicker}</p>
+            <p className="text-sm text-gray-700 leading-relaxed">
+              <span className={`font-bold ${
                 data.recommendation === 'Buy'  ? 'text-green-600' :
                 data.recommendation === 'Sell' ? 'text-red-600'   : 'text-gray-700'
-              }`}>{data.recommendation}</p>
-              <p className="text-xs text-gray-400 mb-1">Consensus</p>
-              <p className="text-base font-semibold text-gray-800">${safe(target)}</p>
-              <p className="text-xs text-gray-400">Mean target</p>
-              {upside !== 'N/A' && (
-                <p className={`text-xs font-medium mt-1 ${parseFloat(upside) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {parseFloat(upside) >= 0 ? '+' : ''}{upside}% upside
-                </p>
-              )}
+              }`}>{data.recommendation}</span>
+              {' '}— {data.name} is trading at ${safe(price)}.
+              {target > 0 && ` Analyst consensus target: $${safe(target)} (${parseFloat(upside) >= 0 ? '+' : ''}${upside}% upside).`}
+              {data.trend && ` Trend: ${data.trend}.`}
+            </p>
+            <div className="flex gap-4 mt-3 text-xs text-gray-500">
+              <span>Support: <strong className="text-red-600">${safe(low52)}</strong></span>
+              <span>Resistance: <strong className="text-green-600">${safe(high52)}</strong></span>
+              {target > 0 && <span>Target: <strong className="text-blue-600">${safe(target)}</strong></span>}
             </div>
           </div>
-        </div>
+        </>
       ) : isCrypto && data.fearGreed?.value != null ? (
         <div className="card">
           <p className="text-sm font-medium text-gray-500 mb-3">Market sentiment — Fear & Greed Index</p>
@@ -315,17 +365,15 @@ export function StockReport({ ticker }: { ticker: string }) {
               data.fearGreed.value >= 40 ? 'text-amber-600' : 'text-red-600'
             }`}>{data.fearGreed.value} — {data.fearGreed.label}</span>
           </div>
-          <div className="h-4 rounded-full overflow-hidden mb-2" style={{
+          <div className="relative h-4 rounded-full overflow-hidden mb-3" style={{
             background: 'linear-gradient(to right, #dc2626, #f59e0b, #16a34a)'
           }}>
-            <div className="relative h-full">
-              <div
-                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 rounded-full border-2 border-white shadow-md bg-gray-900"
-                style={{ left: `${data.fearGreed.value}%` }}
-              />
-            </div>
+            <div
+              className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-5 h-5 rounded-full border-2 border-white shadow-md bg-gray-900"
+              style={{ left: `${data.fearGreed.value}%` }}
+            />
           </div>
-          <div className="flex justify-between text-xs mt-1">
+          <div className="flex justify-between text-xs">
             <span className="text-red-500 font-medium">Extreme Fear (0)</span>
             <span className="text-gray-400">Neutral (50)</span>
             <span className="text-green-600 font-medium">Extreme Greed (100)</span>
