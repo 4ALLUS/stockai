@@ -33,12 +33,17 @@ export async function GET(
       requests.push(fetch('https://api.alternative.me/fng/?limit=1'))
     }
 
-    const responses = await Promise.all(requests)
-    const yahooData = await responses[0].json()
-    const extraData = responses[1] ? await responses[1].json() : null
+    const responses  = await Promise.all(requests)
+    const yahooData  = await responses[0].json()
+    const extraData  = responses[1] ? await responses[1].json() : null
 
-    const meta      = yahooData?.chart?.result?.[0]?.meta
-    const closes    = yahooData?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []
+    const meta       = yahooData?.chart?.result?.[0]?.meta
+    const quotes     = yahooData?.chart?.result?.[0]?.indicators?.quote?.[0] ?? {}
+    const closes     = quotes.close   ?? []
+    const opens      = quotes.open    ?? []
+    const highs      = quotes.high    ?? []
+    const lows       = quotes.low     ?? []
+    const volumes    = quotes.volume  ?? []
     const timestamps = yahooData?.chart?.result?.[0]?.timestamp ?? []
 
     if (!meta) return NextResponse.json(
@@ -60,11 +65,15 @@ export async function GET(
       ? price > ma200 ? 'Above MA200 — Bullish' : 'Below MA200 — Bearish'
       : null
 
-    // Build history array with dates
     const history = closes
       .map((v: any, i: number) => ({
-        date:  timestamps[i] ? new Date(timestamps[i] * 1000).toISOString().split('T')[0] : null,
-        price: v != null ? parseFloat(v.toFixed(4)) : null,
+        date:   timestamps[i] ? new Date(timestamps[i] * 1000).toISOString().split('T')[0] : null,
+        price:  v != null ? parseFloat(v.toFixed(4)) : null,
+        open:   opens[i]   != null ? parseFloat(opens[i].toFixed(4))   : null,
+        high:   highs[i]   != null ? parseFloat(highs[i].toFixed(4))   : null,
+        low:    lows[i]    != null ? parseFloat(lows[i].toFixed(4))    : null,
+        close:  v != null ? parseFloat(v.toFixed(4)) : null,
+        volume: volumes[i]  != null ? Math.round(volumes[i]) : null,
       }))
       .filter((d: any) => d.date && d.price != null)
       .slice(-252)
