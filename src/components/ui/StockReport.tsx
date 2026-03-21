@@ -21,6 +21,10 @@ interface StockData {
   aiSummary: string
   analysts?: { strongBuy: number; buy: number; hold: number; sell: number; strongSell: number; bullPct: number } | null
   fearGreed?: { value: number | null; label: string | null } | null
+  ma50?: number | null
+  ma200?: number | null
+  trend?: string | null
+  trendVsMA200?: string | null
 }
 
 function safe(n: any, decimals = 2): string {
@@ -93,6 +97,7 @@ export function StockReport({ ticker }: { ticker: string }) {
   const upside    = target > 0 && price > 0 ? (((target - price) / price) * 100).toFixed(1) : 'N/A'
   const assetType = getAssetType(ticker)
   const isStock   = assetType === 'stock'
+  const isCrypto  = assetType === 'crypto'
 
   return (
     <div>
@@ -209,7 +214,7 @@ export function StockReport({ ticker }: { ticker: string }) {
             </div>
           </div>
         </div>
-      ) : assetType === 'crypto' && data.fearGreed?.value != null ? (
+      ) : isCrypto && data.fearGreed?.value != null ? (
         <div className="card">
           <p className="text-sm font-medium text-gray-500 mb-3">Market sentiment — Fear & Greed Index</p>
           <div className="flex items-center justify-between mb-3">
@@ -221,7 +226,7 @@ export function StockReport({ ticker }: { ticker: string }) {
           </div>
           <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-2">
             <div
-              className={`h-full rounded-full transition-all ${
+              className={`h-full rounded-full ${
                 data.fearGreed.value >= 60 ? 'bg-green-500' :
                 data.fearGreed.value >= 40 ? 'bg-amber-400' : 'bg-red-500'
               }`}
@@ -236,8 +241,37 @@ export function StockReport({ ticker }: { ticker: string }) {
         </div>
       ) : (
         <div className="card">
-          <p className="text-sm font-medium text-gray-500 mb-2">Asset type</p>
-          <p className="text-sm text-gray-500">{ASSET_LABELS[assetType]} — no analyst consensus available</p>
+          <p className="text-sm font-medium text-gray-500 mb-3">Technical trend</p>
+          {data.ma50 && data.ma200 ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between py-2 border-b border-gray-50">
+                <span className="text-sm text-gray-500">MA50 vs MA200</span>
+                <span className={`text-sm font-medium px-2 py-0.5 rounded-full ${
+                  data.trend?.includes('Bullish')
+                    ? 'bg-green-50 text-green-700'
+                    : 'bg-red-50 text-red-700'
+                }`}>{data.trend}</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-gray-50">
+                <span className="text-sm text-gray-500">Price vs MA200</span>
+                <span className={`text-sm font-medium px-2 py-0.5 rounded-full ${
+                  data.trendVsMA200?.includes('Bullish')
+                    ? 'bg-green-50 text-green-700'
+                    : 'bg-red-50 text-red-700'
+                }`}>{data.trendVsMA200}</span>
+              </div>
+              <div className="flex items-center justify-between py-2 border-b border-gray-50">
+                <span className="text-sm text-gray-500">MA50 (50-day average)</span>
+                <span className="text-sm font-medium text-gray-700">${safe(data.ma50)}</span>
+              </div>
+              <div className="flex items-center justify-between py-2">
+                <span className="text-sm text-gray-500">MA200 (200-day average)</span>
+                <span className="text-sm font-medium text-gray-700">${safe(data.ma200)}</span>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">{ASSET_LABELS[assetType]} — technical data unavailable</p>
+          )}
         </div>
       )}
     </div>
