@@ -308,13 +308,178 @@ export function StockReport({ ticker }: { ticker: string }) {
         y += 12
       }
 
-      // Disclaimer
-      const pageH = doc.internal.pageSize.getHeight()
-      doc.setTextColor(136,136,170); doc.setFontSize(6.5); doc.setFont('helvetica','normal')
-      doc.text(
-        'This report is for informational purposes only and does not constitute financial advice. Data: Yahoo Finance + Alpha Vantage.',
-        margin, pageH-10, { maxWidth: pw-2*margin }
-      )
+    // ── PAGINA 2 ──────────────────────────────────────────────────
+      doc.addPage()
+      y = 20
+
+      // Technical trend
+      doc.setFillColor(0, 48, 135)
+      doc.rect(0, 0, pw, 12, 'F')
+      doc.setTextColor(255,255,255); doc.setFontSize(11); doc.setFont('helvetica','bold')
+      doc.text('Technical Analysis', margin, 8)
+      doc.setFontSize(8); doc.setFont('helvetica','normal')
+      doc.text(decodedTicker, pw-margin, 8, { align: 'right' })
+      y = 20
+
+      if (data.ma50 && data.ma200) {
+        const trendItems = [
+          ['MA50 vs MA200', data.trend ?? 'N/A'],
+          ['Price vs MA200', data.trendVsMA200 ?? 'N/A'],
+          ['MA50 (50-day avg)', `$${safe(data.ma50, 4)}`],
+          ['MA200 (200-day avg)', `$${safe(data.ma200, 4)}`],
+          ['52W High', `$${safe(high52)}`],
+          ['52W Low', `$${safe(low52)}`],
+        ]
+        trendItems.forEach((item, i) => {
+          const isEven = i % 2 === 0
+          doc.setFillColor(isEven ? 245 : 250, isEven ? 245 : 250, isEven ? 250 : 255)
+          doc.rect(margin-2, y-2, pw-2*margin+4, 10, 'F')
+          doc.setTextColor(100,100,120); doc.setFontSize(8); doc.setFont('helvetica','normal')
+          doc.text(item[0], margin, y+5)
+          const isBullish = item[1].includes('Bullish') || item[1].includes('Golden')
+          const isBearish = item[1].includes('Bearish') || item[1].includes('Death')
+          if (isBullish) doc.setTextColor(34, 197, 94)
+          else if (isBearish) doc.setTextColor(239, 68, 68)
+          else doc.setTextColor(26, 26, 46)
+          doc.setFont('helvetica','bold')
+          doc.text(item[1], pw-margin, y+5, { align: 'right' })
+          y += 12
+        })
+      }
+
+      y += 6
+
+      // Fear & Greed for crypto
+      if (isCrypto && data.fearGreed?.value != null) {
+        doc.setFillColor(232, 244, 252)
+        doc.roundedRect(margin-2, y-2, pw-2*margin+4, 30, 3, 3, 'F')
+        doc.setTextColor(26,26,46); doc.setFontSize(9); doc.setFont('helvetica','bold')
+        doc.text('Fear & Greed Index — Crypto Market Sentiment', margin, y+6)
+        const fgVal = data.fearGreed.value
+        const fgColor: [number,number,number] = fgVal >= 60 ? [34,197,94] : fgVal >= 40 ? [245,158,11] : [239,68,68]
+        doc.setTextColor(...fgColor)
+        doc.setFontSize(18)
+        doc.text(`${fgVal}`, margin, y+20)
+        doc.setFontSize(10)
+        doc.text(`— ${data.fearGreed.label}`, margin+15, y+20)
+        // Bar
+        doc.setFillColor(229,231,235)
+        doc.roundedRect(margin, y+23, pw-2*margin-4, 4, 2, 2, 'F')
+        doc.setFillColor(...fgColor)
+        doc.roundedRect(margin, y+23, (pw-2*margin-4)*(fgVal/100), 4, 2, 2, 'F')
+        y += 38
+      }
+
+      // Projections
+      doc.setFillColor(0, 48, 135)
+      doc.rect(margin-2, y, pw-2*margin+4, 7, 'F')
+      doc.setTextColor(255,255,255); doc.setFontSize(8); doc.setFont('helvetica','bold')
+      doc.text('Price Projections — Based on Analyst Targets', margin, y+5)
+      y += 9
+
+      const projections = [
+        ['+1 month',  price + (target-price)*0.08],
+        ['+3 months', price + (target-price)*0.25],
+        ['+6 months', price + (target-price)*0.55],
+        ['+12 months', target],
+      ]
+      projections.forEach((p, i) => {
+        const pval = p[1] as number
+        const pct  = ((pval - price) / price * 100).toFixed(1)
+        const bull = pval >= price
+        doc.setFillColor(i%2===0 ? 245 : 250, i%2===0 ? 245 : 250, i%2===0 ? 250 : 255)
+        doc.rect(margin-2, y, pw-2*margin+4, 9, 'F')
+        doc.setTextColor(100,100,120); doc.setFontSize(8); doc.setFont('helvetica','normal')
+        doc.text(p[0] as string, margin, y+6)
+        doc.setTextColor(bull ? 34 : 239, bull ? 197 : 68, bull ? 94 : 68)
+        doc.setFont('helvetica','bold')
+        doc.text(`$${pval.toFixed(2)}  (${bull?'+':''}${pct}%)`, pw-margin, y+6, { align: 'right' })
+        y += 11
+      })
+
+      y += 8
+
+      // ── PAGINA 3 ──────────────────────────────────────────────────
+      doc.addPage()
+      y = 20
+
+      doc.setFillColor(0, 48, 135)
+      doc.rect(0, 0, pw, 12, 'F')
+      doc.setTextColor(255,255,255); doc.setFontSize(11); doc.setFont('helvetica','bold')
+      doc.text('Additional Information', margin, 8)
+      y = 20
+
+      // Key fundamentals table
+      if (isStock) {
+        doc.setFillColor(0,48,135)
+        doc.rect(margin-2, y, pw-2*margin+4, 7, 'F')
+        doc.setTextColor(255,255,255); doc.setFontSize(8); doc.setFont('helvetica','bold')
+        doc.text('Key Fundamentals', margin, y+5)
+        y += 9
+
+        const fundItems = [
+          ['Company',          data.name],
+          ['Ticker',           decodedTicker],
+          ['Market Cap',       data.marketCap ?? 'N/A'],
+          ['P/E Ratio',        data.pe ?? 'N/A'],
+          ['EPS (TTM)',         data.eps !== 'N/A' ? `$${data.eps}` : 'N/A'],
+          ['Beta',             data.beta ?? 'N/A'],
+          ['52W High',         `$${safe(high52)}`],
+          ['52W Low',          `$${safe(low52)}`],
+          ['Volume',           data.volume ?? 'N/A'],
+          ['Analyst Target',   target ? `$${safe(target)}` : 'N/A'],
+          ['Recommendation',   data.recommendation],
+          ['Asset Type',       ASSET_LABELS[assetType]],
+        ]
+
+        fundItems.forEach((item, i) => {
+          doc.setFillColor(i%2===0 ? 245 : 255, i%2===0 ? 245 : 255, i%2===0 ? 250 : 255)
+          doc.rect(margin-2, y, pw-2*margin+4, 8, 'F')
+          doc.setTextColor(100,100,120); doc.setFontSize(8); doc.setFont('helvetica','normal')
+          doc.text(item[0], margin, y+5.5)
+          doc.setTextColor(26,26,46); doc.setFont('helvetica','bold')
+          doc.text(item[1] as string, pw-margin, y+5.5, { align: 'right' })
+          y += 10
+        })
+        y += 6
+      }
+
+      // Full AI analysis
+      if (data.aiSummary) {
+        doc.setFillColor(232, 244, 252)
+        doc.roundedRect(margin-2, y-2, pw-2*margin+4, 35, 3, 3, 'F')
+        doc.setDrawColor(0,156,222); doc.setLineWidth(0.3)
+        doc.roundedRect(margin-2, y-2, pw-2*margin+4, 35, 3, 3, 'S')
+        doc.setTextColor(26,26,46); doc.setFontSize(9); doc.setFont('helvetica','bold')
+        doc.text('Full AI Analysis', margin, y+6)
+        doc.setFont('helvetica','normal'); doc.setFontSize(8)
+        const aiLines = doc.splitTextToSize(data.aiSummary, pw-2*margin-4)
+        doc.text(aiLines, margin, y+13)
+        y += 40
+      }
+
+      // Disclaimer full
+      doc.setFillColor(245,245,250)
+      doc.roundedRect(margin-2, y-2, pw-2*margin+4, 28, 3, 3, 'F')
+      doc.setTextColor(100,100,120); doc.setFontSize(8); doc.setFont('helvetica','bold')
+      doc.text('Disclaimer', margin, y+5)
+      doc.setFont('helvetica','normal'); doc.setFontSize(7)
+      const disclaimer = 'This report is generated for informational purposes only and does not constitute financial advice, investment advice, or a recommendation to buy or sell any security. All data is sourced from Yahoo Finance and Alpha Vantage and verified at the time of generation. AI analysis is based solely on the verified data provided — no numbers are invented or estimated. Past performance is not indicative of future results. Investing involves risk, including the possible loss of principal. Always consult a qualified financial advisor before making investment decisions.'
+      const disclaimerLines = doc.splitTextToSize(disclaimer, pw-2*margin-4)
+      doc.text(disclaimerLines, margin, y+11)
+      y += 32
+
+      // Footer all pages
+      const totalPages = doc.getNumberOfPages()
+      for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p)
+        const pageH2 = doc.internal.pageSize.getHeight()
+        doc.setFillColor(0,48,135)
+        doc.rect(0, pageH2-8, pw, 8, 'F')
+        doc.setTextColor(255,255,255); doc.setFontSize(6.5); doc.setFont('helvetica','normal')
+        doc.text(`StockAI Report · ${decodedTicker} · ${new Date().toLocaleDateString('en-US')}`, margin, pageH2-3)
+        doc.text(`Page ${p} of ${totalPages}`, pw-margin, pageH2-3, { align: 'right' })
+      }
 
       doc.save(`${decodedTicker}_StockAI_Report.pdf`)
     } catch (e: any) {
