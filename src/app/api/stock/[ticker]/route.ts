@@ -1,17 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+function calcMA(closes: number[], period: number): number {
+  const valid = closes.filter(v => v != null && !isNaN(v))
+  if (valid.length < period) return 0
+  const slice = valid.slice(-period)
+  return slice.reduce((a, b) => a + b, 0) / period
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: { ticker: string } }
 ) {
-  const ticker = decodeURIComponent(params.ticker).toUpperCase()
-  const AV_KEY = process.env.ALPHA_VANTAGE_KEY ?? 'TUA_CHIAVE_AV'
+  const ticker   = decodeURIComponent(params.ticker).toUpperCase()
+  const AV_KEY   = process.env.ALPHA_VANTAGE_KEY ?? 'demo'
   const isCrypto = ticker.includes('-USD') || ticker.includes('-BTC')
   const isStock  = !isCrypto && !ticker.includes('=X') && !ticker.includes('=F') && !ticker.startsWith('^')
 
   try {
     const requests: Promise<Response>[] = [
-      fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`, {
+      fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1y`, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
       }),
     ]
@@ -23,16 +30,16 @@ export async function GET(
     }
 
     if (isCrypto) {
-      requests.push(
-        fetch('https://api.alternative.me/fng/?limit=1')
-      )
+      requests.push(fetch('https://api.alternative.me/fng/?limit=1'))
     }
 
-    const responses  = await Promise.all(requests)
-    const yahooData  = await responses[0].json()
-    const extraData  = responses[1] ? await responses[1].json() : null
+    const responses = await Promise.all(requests)
+    const yahooData = await responses[0].json()
+    const extraData = responses[1] ? await responses[1].json() : null
 
-    const meta = yahooData?.chart?.result?.[0]?.meta
+    const meta   = yahooData?.chart?.result?.[0]?.meta
+    const closes = yahooData?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []
+
     if (!meta) return NextResponse.json(
       { error: `Ticker "${ticker}" not found` }, { status: 404 }
     )
@@ -42,16 +49,18 @@ export async function GET(
     const change    = price - prev
     const changePct = prev > 0 ? (change / prev) * 100 : 0
     const volume    = meta.regularMarketVolume ?? 0
-    const ma50      = meta.fiftyDayAverage ?? 0
-    const ma200     = meta.twoHundredDayAverage ?? 0
-    const trend     = ma50 > 0 && ma200 > 0
+
+    // Calculate MA50 and MA200 from historical closes
+    const ma50  = calcMA(closes, 50)
+    const ma200 = calcMA(closes, 200)
+    const trend = ma50 > 0 && ma200 > 0
       ? ma50 > ma200 ? 'Golden Cross — Bullish' : 'Death Cross — Bearish'
       : null
     const trendVsMA200 = ma200 > 0
       ? price > ma200 ? 'Above MA200 — Bullish' : 'Below MA200 — Bearish'
       : null
 
-    // Stock fundamentals from Alpha Vantage
+    // Stock fundamentals
     const overview      = isStock ? extraData : null
     const analystTarget = parseFloat(overview?.AnalystTargetPrice ?? '0') || 0
     const strongBuy     = parseInt(overview?.AnalystRatingStrongBuy ?? '0')
@@ -70,14 +79,14 @@ export async function GET(
     const fngValue = fng ? parseInt(fng.value) : null
     const fngLabel = fng?.value_classification ?? null
 
-    let aiSummary = `${overview?.Name ?? meta.shortName ?? ticker} is trading at $${price.toFixed(2)}${analystTarget > 0 ? `, analyst mean target: $${analystTarget.toFixed(2)}, consensus: ${rec}` : ''}.`
+    let aiSummary = `${overview?.Name ?? meta.shortName ?? ticker} is trading at $${price.toFixed(2)}.`
 
     try {
       const Anthropic = (await import('@anthropic-ai/sdk')).default
       const client = new Anthropic()
       const content = isStock
-        ? `Analyze ${ticker} (${overview?.Name ?? ticker}): Price $${price.toFixed(2)}, Change ${changePct.toFixed(2)}%, P/E ${overview?.PERatio ?? 'N/A'}, EPS $${overview?.EPS ?? 'N/A'}, Beta ${overview?.Beta ?? 'N/A'}, 52W High $${overview?.['52WeekHigh'] ?? 'N/A'}, 52W Low $${overview?.['52WeekLow'] ?? 'N/A'}, Analyst target $${analystTarget > 0 ? analystTarget.toFixed(2) : 'N/A'}, Recommendation: ${rec}, Sector: ${overview?.Sector ?? 'N/A'}, Market Cap $${overview?.MarketCapitalization ? (parseInt(overview.MarketCapitalization)/1e9).toFixed(1)+'B' : 'N/A'}, MA50: $${ma50.toFixed(2)}, MA200: $${ma200.toFixed(2)}, Trend: ${trend ?? 'N/A'}.`
-        : `Analyze ${ticker}: Price $${price.toFixed(2)}, Change ${changePct.toFixed(2)}%, 52W High $${meta.fiftyTwoWeekHigh ?? 'N/A'}, 52W Low $${meta.fiftyTwoWeekLow ?? 'N/A'}, MA50: $${ma50.toFixed(2)}, MA200: $${ma200.toFixed(2)}, Trend: ${trend ?? trendVsMA200 ?? 'N/A'}${fngValue ? `, Fear & Greed Index: ${fngValue} (${fngLabel})` : ''}.`
+        ? `Analyze ${ticker} (${overview?.Name ?? ticker}): Price $${price.toFixed(2)}, Change ${changePct.toFixed(2)}%, P/E ${overview?.PERatio ?? 'N/A'}, EPS $${overview?.EPS ?? 'N/A'}, Beta ${overview?.Beta ?? 'N/A'}, 52W High $${overview?.['52WeekHigh'] ?? 'N/A'}, 52W Low $${overview?.['52WeekLow'] ?? 'N/A'}, Analyst target $${analystTarget > 0 ? analystTarget.toFixed(2) : 'N/A'}, Recommendation: ${rec}, Sector: ${overview?.Sector ?? 'N/A'}, MA50: $${ma50.toFixed(4)}, MA200: $${ma200.toFixed(4)}, Trend: ${trend ?? 'N/A'}.`
+        : `Analyze ${ticker}: Price $${price.toFixed(2)}, Change ${changePct.toFixed(2)}%, 52W High $${meta.fiftyTwoWeekHigh ?? 'N/A'}, 52W Low $${meta.fiftyTwoWeekLow ?? 'N/A'}, MA50: $${ma50.toFixed(4)}, MA200: $${ma200.toFixed(4)}, Trend: ${trend ?? trendVsMA200 ?? 'N/A'}${fngValue ? `, Fear & Greed Index: ${fngValue} (${fngLabel})` : ''}.`
 
       const res = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
@@ -110,8 +119,8 @@ export async function GET(
       aiSummary,
       analysts:       isStock ? { strongBuy, buy, hold, sell, strongSell, bullPct } : null,
       fearGreed:      isCrypto ? { value: fngValue, label: fngLabel } : null,
-      ma50:           ma50 > 0 ? parseFloat(ma50.toFixed(2)) : null,
-      ma200:          ma200 > 0 ? parseFloat(ma200.toFixed(2)) : null,
+      ma50:           ma50 > 0 ? parseFloat(ma50.toFixed(4)) : null,
+      ma200:          ma200 > 0 ? parseFloat(ma200.toFixed(4)) : null,
       trend,
       trendVsMA200,
     })
