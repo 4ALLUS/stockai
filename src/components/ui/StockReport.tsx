@@ -116,11 +116,23 @@ export function StockReport({ ticker }: { ticker: string }) {
     try {
       const supabase = createClient()
       const { data: { user }, error: userError } = await supabase.auth.getUser()
+      console.log('[watchlist] user:', user, 'userError:', userError)
       if (userError || !user) {
         alert('Please sign in to add to watchlist')
         setWatchlistLoading(false)
         return
       }
+
+      const payload = {
+        user_id:    user.id,
+        ticker:     decodedTicker,
+        name:       data.name,
+        price,
+        change,
+        change_pct: changePct,
+        added_at:   new Date().toISOString(),
+      }
+      console.log('[watchlist] inserting:', payload)
 
       const { error: dbError } = await supabase.from('watchlist').upsert({
         user_id:    user.id,
@@ -132,10 +144,14 @@ export function StockReport({ ticker }: { ticker: string }) {
         added_at:   new Date().toISOString(),
       }, { onConflict: 'user_id,ticker' })
 
-      if (dbError) throw dbError
+      if (dbError) {
+        alert(`DB Error:\ncode: ${dbError.code}\nmessage: ${dbError.message}\ndetails: ${dbError.details}\nhint: ${dbError.hint}`)
+        setWatchlistLoading(false)
+        return
+      }
       setWatchlisted(true)
     } catch (e: any) {
-      alert('Error: ' + e.message)
+      alert('Error: ' + JSON.stringify(e))
     } finally {
       setWatchlistLoading(false)
     }

@@ -1,8 +1,9 @@
 'use client'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { LayoutDashboard, Search, TrendingUp, CreditCard, LogOut } from 'lucide-react'
 import { clsx } from 'clsx'
+import { createClient } from '@/lib/supabase/client'
 
 const nav = [
   { href: '/dashboard', label: 'Dashboard',   icon: LayoutDashboard },
@@ -13,6 +14,13 @@ const nav = [
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const path = usePathname()
+  const router = useRouter()
+
+  const handleSignOut = async () => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/signup')
+  }
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -54,13 +62,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <div className="bg-amber-50 text-amber-800 text-[11px] text-center py-1.5 px-2 rounded-lg mb-3">
             Trial: 1 days left
           </div>
-          <Link
-            href="/api/auth/signout"
-            className="flex items-center gap-2 px-2.5 py-2 text-sm text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
+          <button
+            onClick={handleSignOut}
+            className="flex items-center gap-2 px-2.5 py-2 text-sm text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-50 transition-colors w-full"
           >
             <LogOut size={14} />
             Sign out
-          </Link>
+          </button>
         </div>
       </aside>
 
