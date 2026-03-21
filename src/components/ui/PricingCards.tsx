@@ -5,11 +5,11 @@ const plans = [
   {
     name: 'Free Trial',
     price: '$0',
-    period: '3 days · no card needed',
+    period: '1 day · 2 reports · no card needed',
     badge: null,
     featured: false,
     features: [
-      { text: '5 stock reports',     included: true },
+      { text: '2 stock reports',     included: true },
       { text: 'AI summary',          included: true },
       { text: 'Basic sentiment',     included: true },
       { text: 'PDF export',          included: false },
