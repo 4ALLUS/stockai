@@ -4,7 +4,7 @@ import { Download, Plus, TrendingUp, TrendingDown, Check } from 'lucide-react'
 import { MetricCard } from './MetricCard'
 import dynamic from 'next/dynamic'
 import { createBrowserClient } from '@supabase/ssr'
-
+const CandlestickChart = dynamic(() => import('./CandlestickChart'), { ssr: false })
 const supabaseClient = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
