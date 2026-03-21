@@ -2,18 +2,21 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
   try {
-    const data   = await req.json()
-    const ticker = data.ticker ?? 'UNKNOWN'
+    const data      = await req.json()
+    const ticker    = data.ticker ?? 'UNKNOWN'
+    const pdfUrl    = process.env.PDF_SERVICE_URL ?? 'https://web-production-13a1c.up.railway.app'
 
-    const pythonUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/report/pdf.py`
-
-    const res = await fetch(pythonUrl, {
-      method: 'POST',
+    const res = await fetch(`${pdfUrl}/pdf`, {
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body:    JSON.stringify(data),
     })
 
-    if (!res.ok) throw new Error('Python service error')
+    if (!res.ok) {
+      const err = await res.text()
+      console.error('[PDF]', err)
+      return NextResponse.json({ error: 'PDF service error' }, { status: 500 })
+    }
 
     const pdfBytes = await res.arrayBuffer()
 
