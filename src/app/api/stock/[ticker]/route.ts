@@ -42,6 +42,14 @@ export async function GET(
     const change    = price - prev
     const changePct = prev > 0 ? (change / prev) * 100 : 0
     const volume    = meta.regularMarketVolume ?? 0
+    const ma50      = meta.fiftyDayAverage ?? 0
+    const ma200     = meta.twoHundredDayAverage ?? 0
+    const trend     = ma50 > 0 && ma200 > 0
+      ? ma50 > ma200 ? 'Golden Cross — Bullish' : 'Death Cross — Bearish'
+      : null
+    const trendVsMA200 = ma200 > 0
+      ? price > ma200 ? 'Above MA200 — Bullish' : 'Below MA200 — Bearish'
+      : null
 
     // Stock fundamentals from Alpha Vantage
     const overview      = isStock ? extraData : null
@@ -58,7 +66,7 @@ export async function GET(
       : 'N/A'
 
     // Crypto Fear & Greed
-    const fng     = isCrypto ? extraData?.data?.[0] : null
+    const fng      = isCrypto ? extraData?.data?.[0] : null
     const fngValue = fng ? parseInt(fng.value) : null
     const fngLabel = fng?.value_classification ?? null
 
@@ -68,8 +76,8 @@ export async function GET(
       const Anthropic = (await import('@anthropic-ai/sdk')).default
       const client = new Anthropic()
       const content = isStock
-        ? `Analyze ${ticker} (${overview?.Name ?? ticker}): Price $${price.toFixed(2)}, Change ${changePct.toFixed(2)}%, P/E ${overview?.PERatio ?? 'N/A'}, EPS $${overview?.EPS ?? 'N/A'}, Beta ${overview?.Beta ?? 'N/A'}, 52W High $${overview?.['52WeekHigh'] ?? 'N/A'}, 52W Low $${overview?.['52WeekLow'] ?? 'N/A'}, Analyst target $${analystTarget > 0 ? analystTarget.toFixed(2) : 'N/A'}, Recommendation: ${rec}, Sector: ${overview?.Sector ?? 'N/A'}, Market Cap $${overview?.MarketCapitalization ? (parseInt(overview.MarketCapitalization)/1e9).toFixed(1)+'B' : 'N/A'}.`
-        : `Analyze ${ticker}: Price $${price.toFixed(2)}, Change ${changePct.toFixed(2)}%, 52W High $${meta.fiftyTwoWeekHigh ?? 'N/A'}, 52W Low $${meta.fiftyTwoWeekLow ?? 'N/A'}${fngValue ? `, Fear & Greed Index: ${fngValue} (${fngLabel})` : ''}.`
+        ? `Analyze ${ticker} (${overview?.Name ?? ticker}): Price $${price.toFixed(2)}, Change ${changePct.toFixed(2)}%, P/E ${overview?.PERatio ?? 'N/A'}, EPS $${overview?.EPS ?? 'N/A'}, Beta ${overview?.Beta ?? 'N/A'}, 52W High $${overview?.['52WeekHigh'] ?? 'N/A'}, 52W Low $${overview?.['52WeekLow'] ?? 'N/A'}, Analyst target $${analystTarget > 0 ? analystTarget.toFixed(2) : 'N/A'}, Recommendation: ${rec}, Sector: ${overview?.Sector ?? 'N/A'}, Market Cap $${overview?.MarketCapitalization ? (parseInt(overview.MarketCapitalization)/1e9).toFixed(1)+'B' : 'N/A'}, MA50: $${ma50.toFixed(2)}, MA200: $${ma200.toFixed(2)}, Trend: ${trend ?? 'N/A'}.`
+        : `Analyze ${ticker}: Price $${price.toFixed(2)}, Change ${changePct.toFixed(2)}%, 52W High $${meta.fiftyTwoWeekHigh ?? 'N/A'}, 52W Low $${meta.fiftyTwoWeekLow ?? 'N/A'}, MA50: $${ma50.toFixed(2)}, MA200: $${ma200.toFixed(2)}, Trend: ${trend ?? trendVsMA200 ?? 'N/A'}${fngValue ? `, Fear & Greed Index: ${fngValue} (${fngLabel})` : ''}.`
 
       const res = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
@@ -95,7 +103,6 @@ export async function GET(
       eps:            overview?.EPS ?? 'N/A',
       beta:           overview?.Beta ? parseFloat(overview.Beta).toFixed(2) : 'N/A',
       week52High:     parseFloat(overview?.['52WeekHigh'] ?? '0') || meta.fiftyTwoWeekHigh || 0,
-      
       week52Low:      parseFloat(overview?.['52WeekLow'] ?? '0')  || meta.fiftyTwoWeekLow  || 0,
       volume:         volume ? (volume/1e6).toFixed(1)+'M' : 'N/A',
       analystTarget,
@@ -103,6 +110,10 @@ export async function GET(
       aiSummary,
       analysts:       isStock ? { strongBuy, buy, hold, sell, strongSell, bullPct } : null,
       fearGreed:      isCrypto ? { value: fngValue, label: fngLabel } : null,
+      ma50:           ma50 > 0 ? parseFloat(ma50.toFixed(2)) : null,
+      ma200:          ma200 > 0 ? parseFloat(ma200.toFixed(2)) : null,
+      trend,
+      trendVsMA200,
     })
 
   } catch (err) {
