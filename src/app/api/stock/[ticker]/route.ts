@@ -13,6 +13,7 @@ export async function GET(
 ) {
   const ticker   = decodeURIComponent(params.ticker).toUpperCase()
   const AV_KEY   = process.env.ALPHA_VANTAGE_KEY ?? 'demo'
+  const FH_KEY   = process.env.FINNHUB_KEY ?? 'd6usl79r01qig545o780d6usl79r01qig545o78g'
   const isCrypto = ticker.includes('-USD') || ticker.includes('-BTC')
   const isStock  = !isCrypto && !ticker.includes('=X') && !ticker.includes('=F') && !ticker.startsWith('^')
 
@@ -27,6 +28,12 @@ export async function GET(
       requests.push(
         fetch(`https://www.alphavantage.co/query?function=OVERVIEW&symbol=${ticker}&apikey=${AV_KEY}`)
       )
+      requests.push(
+        fetch(`https://finnhub.io/api/v1/stock/metric?symbol=${ticker}&metric=all&token=${FH_KEY}`)
+      )
+      requests.push(
+        fetch(`https://finnhub.io/api/v1/stock/recommendation?symbol=${ticker}&token=${FH_KEY}`)
+      )
     }
 
     if (isCrypto) {
@@ -35,7 +42,10 @@ export async function GET(
 
     const responses  = await Promise.all(requests)
     const yahooData  = await responses[0].json()
-    const extraData  = responses[1] ? await responses[1].json() : null
+    const avData     = isStock ? await responses[1].json() : null
+    const fhMetrics  = isStock ? await responses[2].json() : null
+    const fhRec      = isStock ? await responses[3].json() : null
+    const cryptoData = isCrypto ? await responses[1].json() : null
 
     const meta       = yahooData?.chart?.result?.[0]?.meta
     const quotes     = yahooData?.chart?.result?.[0]?.indicators?.quote?.[0] ?? {}
@@ -78,31 +88,85 @@ export async function GET(
       .filter((d: any) => d.date && d.price != null)
       .slice(-252)
 
-    const overview      = isStock ? extraData : null
-    const analystTarget = parseFloat(overview?.AnalystTargetPrice ?? '0') || 0
-    const strongBuy     = parseInt(overview?.AnalystRatingStrongBuy ?? '0')
-    const buy           = parseInt(overview?.AnalystRatingBuy ?? '0')
-    const hold          = parseInt(overview?.AnalystRatingHold ?? '0')
-    const sell          = parseInt(overview?.AnalystRatingSell ?? '0')
-    const strongSell    = parseInt(overview?.AnalystRatingStrongSell ?? '0')
+    // Alpha Vantage fundamentals
+    const av = avData && avData.Symbol ? avData : null
+
+    // Finnhub fundamentals as fallback
+    const fhM = fhMetrics?.metric ?? {}
+
+    // P/E — AV first, then Finnhub, then Yahoo
+    const pe = av?.PERatio && parseFloat(av.PERatio) > 0
+      ? parseFloat(av.PERatio).toFixed(1) + 'x'
+      : fhM['peNormalizedAnnual'] ? parseFloat(fhM['peNormalizedAnnual']).toFixed(1) + 'x'
+      : meta.trailingPE ? parseFloat(meta.trailingPE).toFixed(1) + 'x'
+      : 'N/A'
+
+    // EPS
+    const eps = av?.EPS && parseFloat(av.EPS) !== 0
+      ? av.EPS
+      : fhM['epsNormalizedAnnual'] ? parseFloat(fhM['epsNormalizedAnnual']).toFixed(2)
+      : 'N/A'
+
+    // Beta
+    const beta = av?.Beta && parseFloat(av.Beta) > 0
+      ? parseFloat(av.Beta).toFixed(2)
+      : fhM['beta'] ? parseFloat(fhM['beta']).toFixed(2)
+      : 'N/A'
+
+    // Market cap
+    const marketCap = av?.MarketCapitalization && parseInt(av.MarketCapitalization) > 0
+      ? '$' + (parseInt(av.MarketCapitalization)/1e9).toFixed(1) + 'B'
+      : meta.marketCap ? '$' + (meta.marketCap/1e9).toFixed(1) + 'B'
+      : fhM['marketCapitalization'] ? '$' + (fhM['marketCapitalization']/1e3).toFixed(1) + 'B'
+      : 'N/A'
+
+    // 52W
+    const week52High = parseFloat(av?.['52WeekHigh'] ?? '0') || fhM['52WeekHigh'] || meta.fiftyTwoWeekHigh || 0
+    const week52Low  = parseFloat(av?.['52WeekLow']  ?? '0') || fhM['52WeekLow']  || meta.fiftyTwoWeekLow  || 0
+
+    // Analyst target
+    const analystTarget = av?.AnalystTargetPrice && parseFloat(av.AnalystTargetPrice) > 0
+      ? parseFloat(av.AnalystTargetPrice)
+      : fhM['targetMedian'] ? parseFloat(fhM['targetMedian'])
+      : 0
+
+    // Analyst ratings — AV first, then Finnhub
+    let strongBuy = 0, buy = 0, hold = 0, sell = 0, strongSell = 0
+
+    if (av?.AnalystRatingStrongBuy && parseInt(av.AnalystRatingStrongBuy) > 0) {
+      strongBuy  = parseInt(av.AnalystRatingStrongBuy ?? '0')
+      buy        = parseInt(av.AnalystRatingBuy ?? '0')
+      hold       = parseInt(av.AnalystRatingHold ?? '0')
+      sell       = parseInt(av.AnalystRatingSell ?? '0')
+      strongSell = parseInt(av.AnalystRatingStrongSell ?? '0')
+    } else if (fhRec && Array.isArray(fhRec) && fhRec.length > 0) {
+      const latest = fhRec[0]
+      strongBuy  = latest.strongBuy  ?? 0
+      buy        = latest.buy        ?? 0
+      hold       = latest.hold       ?? 0
+      sell       = latest.sell       ?? 0
+      strongSell = latest.strongSell ?? 0
+    }
+
     const totalAnalysts = strongBuy + buy + hold + sell + strongSell
-    const bullPct       = totalAnalysts > 0 ? Math.round((strongBuy + buy) / totalAnalysts * 100) : 0
-    const rec           = isStock
+    const bullPct = totalAnalysts > 0 ? Math.round((strongBuy + buy) / totalAnalysts * 100) : 0
+    const rec     = isStock && totalAnalysts > 0
       ? (bullPct >= 60 ? 'Buy' : bullPct >= 40 ? 'Hold' : 'Sell')
       : 'N/A'
 
-    const fng      = isCrypto ? extraData?.data?.[0] : null
+    // Crypto Fear & Greed
+    const fng      = isCrypto ? cryptoData?.data?.[0] : null
     const fngValue = fng ? parseInt(fng.value) : null
     const fngLabel = fng?.value_classification ?? null
 
-    let aiSummary = `${overview?.Name ?? meta.shortName ?? ticker} is trading at $${price.toFixed(2)}.`
+    let aiSummary = `${av?.Name ?? meta.shortName ?? ticker} is trading at $${price.toFixed(2)}.`
 
     try {
       const Anthropic = (await import('@anthropic-ai/sdk')).default
       const client = new Anthropic()
       const content = isStock
-        ? `Analyze ${ticker} (${overview?.Name ?? ticker}): Price $${price.toFixed(2)}, Change ${changePct.toFixed(2)}%, P/E ${overview?.PERatio ?? 'N/A'}, EPS $${overview?.EPS ?? 'N/A'}, Beta ${overview?.Beta ?? 'N/A'}, 52W High $${overview?.['52WeekHigh'] ?? 'N/A'}, 52W Low $${overview?.['52WeekLow'] ?? 'N/A'}, Analyst target $${analystTarget > 0 ? analystTarget.toFixed(2) : 'N/A'}, Recommendation: ${rec}, Sector: ${overview?.Sector ?? 'N/A'}, MA50: $${ma50.toFixed(4)}, MA200: $${ma200.toFixed(4)}, Trend: ${trend ?? 'N/A'}.`
-        : `Analyze ${ticker}: Price $${price.toFixed(2)}, Change ${changePct.toFixed(2)}%, 52W High $${meta.fiftyTwoWeekHigh ?? 'N/A'}, 52W Low $${meta.fiftyTwoWeekLow ?? 'N/A'}, MA50: $${ma50.toFixed(4)}, MA200: $${ma200.toFixed(4)}, Trend: ${trend ?? trendVsMA200 ?? 'N/A'}${fngValue ? `, Fear & Greed Index: ${fngValue} (${fngLabel})` : ''}.`
+        ? `Analyze ${ticker} (${av?.Name ?? meta.shortName ?? ticker}): Price $${price.toFixed(2)}, Change ${changePct.toFixed(2)}%, P/E ${pe}, EPS $${eps}, Beta ${beta}, 52W High $${week52High}, 52W Low $${week52Low}, Analyst target $${analystTarget > 0 ? analystTarget.toFixed(2) : 'N/A'}, Recommendation: ${rec}, MA50: $${ma50.toFixed(4)}, MA200: $${ma200.toFixed(4)}, Trend: ${trend ?? 'N/A'}.`
+        : `Analyze ${ticker}: Price $${price.toFixed(2)}, Change ${changePct.toFixed(2)}%, 52W High $${week52High}, 52W Low $${week52Low}, MA50: $${ma50.toFixed(4)}, MA200: $${ma200.toFixed(4)}, Trend: ${trend ?? trendVsMA200 ?? 'N/A'}${fngValue ? `, Fear & Greed Index: ${fngValue} (${fngLabel})` : ''}.`
 
       const res = await client.messages.create({
         model: 'claude-sonnet-4-20250514',
@@ -117,26 +181,26 @@ export async function GET(
 
     return NextResponse.json({
       ticker,
-      name:           overview?.Name ?? meta.shortName ?? meta.longName ?? ticker,
+      name:       av?.Name ?? meta.shortName ?? meta.longName ?? ticker,
       price,
-      change:         parseFloat(change.toFixed(2)),
-      changePct:      parseFloat(changePct.toFixed(2)),
-      marketCap:      overview?.MarketCapitalization
-        ? '$'+(parseInt(overview.MarketCapitalization)/1e9).toFixed(1)+'B'
-        : meta.marketCap ? '$'+(meta.marketCap/1e9).toFixed(1)+'B' : 'N/A',
-      pe:             overview?.PERatio ? parseFloat(overview.PERatio).toFixed(1)+'x' : 'N/A',
-      eps:            overview?.EPS ?? 'N/A',
-      beta:           overview?.Beta ? parseFloat(overview.Beta).toFixed(2) : 'N/A',
-      week52High:     parseFloat(overview?.['52WeekHigh'] ?? '0') || meta.fiftyTwoWeekHigh || 0,
-      week52Low:      parseFloat(overview?.['52WeekLow'] ?? '0')  || meta.fiftyTwoWeekLow  || 0,
-      volume:         volume ? (volume/1e6).toFixed(1)+'M' : 'N/A',
+      change:     parseFloat(change.toFixed(2)),
+      changePct:  parseFloat(changePct.toFixed(2)),
+      marketCap,
+      pe,
+      eps,
+      beta,
+      week52High,
+      week52Low,
+      volume:     volume ? (volume/1e6).toFixed(1)+'M' : 'N/A',
       analystTarget,
       recommendation: rec,
       aiSummary,
-      analysts:       isStock ? { strongBuy, buy, hold, sell, strongSell, bullPct } : null,
-      fearGreed:      isCrypto ? { value: fngValue, label: fngLabel } : null,
-      ma50:           ma50 > 0 ? parseFloat(ma50.toFixed(4)) : null,
-      ma200:          ma200 > 0 ? parseFloat(ma200.toFixed(4)) : null,
+      analysts:   isStock && totalAnalysts > 0
+        ? { strongBuy, buy, hold, sell, strongSell, bullPct }
+        : null,
+      fearGreed:  isCrypto ? { value: fngValue, label: fngLabel } : null,
+      ma50:       ma50 > 0 ? parseFloat(ma50.toFixed(4)) : null,
+      ma200:      ma200 > 0 ? parseFloat(ma200.toFixed(4)) : null,
       trend,
       trendVsMA200,
       history,
