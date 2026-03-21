@@ -4,7 +4,7 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: { ticker: string } }
 ) {
-  const ticker = params.ticker.toUpperCase()
+  const ticker = decodeURIComponent(params.ticker).toUpperCase()
   const AV_KEY = process.env.ALPHA_VANTAGE_KEY ?? 'TUA_CHIAVE_AV'
   const isCrypto = ticker.includes('-USD') || ticker.includes('-BTC')
   const isStock  = !isCrypto && !ticker.includes('=X') && !ticker.includes('=F') && !ticker.startsWith('^')
