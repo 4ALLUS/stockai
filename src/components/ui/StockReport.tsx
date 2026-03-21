@@ -2,6 +2,9 @@
 import { useEffect, useState } from 'react'
 import { Download, Plus, TrendingUp, TrendingDown } from 'lucide-react'
 import { MetricCard } from './MetricCard'
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+
+interface HistoryPoint { date: string; price: number }
 
 interface StockData {
   ticker: string
@@ -25,6 +28,7 @@ interface StockData {
   ma200?: number | null
   trend?: string | null
   trendVsMA200?: string | null
+  history?: HistoryPoint[]
 }
 
 function safe(n: any, decimals = 2): string {
@@ -47,6 +51,22 @@ const ASSET_LABELS: Record<string, string> = {
   forex:     'Forex pair',
   commodity: 'Futures / Commodity',
   index:     'Market Index',
+}
+
+function buildChartData(history: HistoryPoint[], ma50: number | null, ma200: number | null) {
+  if (!history || history.length === 0) return []
+  const n = history.length
+  return history.map((h, i) => {
+    const slice = history.slice(0, i + 1).map(x => x.price)
+    const ma50v  = i >= 49  ? parseFloat((slice.slice(-50).reduce((a,b)=>a+b,0)/50).toFixed(4))  : null
+    const ma200v = i >= 199 ? parseFloat((slice.slice(-200).reduce((a,b)=>a+b,0)/200).toFixed(4)) : null
+    return {
+      date:  h.date.slice(5),
+      price: h.price,
+      ma50:  ma50v,
+      ma200: ma200v,
+    }
+  }).filter((_, i) => i % Math.max(1, Math.floor(n / 120)) === 0)
 }
 
 export function StockReport({ ticker }: { ticker: string }) {
@@ -100,6 +120,7 @@ export function StockReport({ ticker }: { ticker: string }) {
   const assetType = getAssetType(decodedTicker)
   const isStock   = assetType === 'stock'
   const isCrypto  = assetType === 'crypto'
+  const chartData = buildChartData(data.history ?? [], data.ma50 ?? null, data.ma200 ?? null)
 
   return (
     <div>
@@ -139,6 +160,35 @@ export function StockReport({ ticker }: { ticker: string }) {
         <MetricCard label="Volume"         value={data.volume ?? 'N/A'} />
         <MetricCard label="Analyst target" value={isStock && target ? `$${safe(target)}` : 'N/A'} subColor="green" />
       </div>
+
+      {/* Price Chart */}
+      {chartData.length > 0 && (
+        <div className="card mb-5">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-medium text-gray-500">Price chart — 1 year</p>
+            <div className="flex gap-4 text-xs text-gray-400">
+              <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-brand-400 inline-block"></span>Price</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-amber-400 inline-block"></span>MA50</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-red-400 inline-block"></span>MA200</span>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 10 }}>
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+              <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} domain={['auto', 'auto']} width={55}
+                tickFormatter={(v) => `$${v.toFixed(price < 10 ? 3 : price < 100 ? 1 : 0)}`} />
+              <Tooltip
+                formatter={(value: any, name: string) => [`$${parseFloat(value).toFixed(price < 10 ? 4 : 2)}`, name]}
+                labelStyle={{ fontSize: 11 }}
+                contentStyle={{ fontSize: 11, borderRadius: 8, border: '0.5px solid #e5e7eb' }}
+              />
+              <Line type="monotone" dataKey="price" stroke="#378add" strokeWidth={1.5} dot={false} name="Price" />
+              <Line type="monotone" dataKey="ma50"  stroke="#f59e0b" strokeWidth={1} dot={false} name="MA50" strokeDasharray="4 2" />
+              <Line type="monotone" dataKey="ma200" stroke="#ef4444" strokeWidth={1} dot={false} name="MA200" strokeDasharray="4 2" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {high52 > 0 && low52 > 0 && (
         <div className="card mb-5">
@@ -260,11 +310,11 @@ export function StockReport({ ticker }: { ticker: string }) {
               </div>
               <div className="flex items-center justify-between py-2 border-b border-gray-50">
                 <span className="text-sm text-gray-500">MA50 (50-day average)</span>
-                <span className="text-sm font-medium text-gray-700">${safe(data.ma50)}</span>
+                <span className="text-sm font-medium text-gray-700">${safe(data.ma50, 4)}</span>
               </div>
               <div className="flex items-center justify-between py-2">
                 <span className="text-sm text-gray-500">MA200 (200-day average)</span>
-                <span className="text-sm font-medium text-gray-700">${safe(data.ma200)}</span>
+                <span className="text-sm font-medium text-gray-700">${safe(data.ma200, 4)}</span>
               </div>
             </div>
           ) : (
