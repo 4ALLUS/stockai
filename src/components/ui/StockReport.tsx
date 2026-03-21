@@ -60,125 +60,142 @@ const ASSET_LABELS: Record<string, string> = {
   index:     'Market Index',
 }
 
-function CandlestickChart({ history, ma50, ma200 }: { history: HistoryPoint[], ma50: number | null, ma200: number | null }) {
+function CandlestickChart({ history }: { history: HistoryPoint[] }) {
   const chartRef = useRef<HTMLDivElement>(null)
+  const chartInstance = useRef<any>(null)
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
     if (!chartRef.current || !history.length) return
 
-    let chart: any = null
+    let cancelled = false
 
     const init = async () => {
-      const { createChart, ColorType, CrosshairMode } = await import('lightweight-charts')
+      try {
+        const LW = await import('lightweight-charts')
+        if (cancelled || !chartRef.current) return
 
-      chart = createChart(chartRef.current!, {
-        width:  chartRef.current!.clientWidth,
-        height: 280,
-        layout: {
-          background: { type: ColorType.Solid, color: 'transparent' },
-          textColor: '#888',
-        },
-        grid: {
-          vertLines: { color: '#f0f0f0' },
-          horzLines: { color: '#f0f0f0' },
-        },
-        crosshair: { mode: CrosshairMode.Normal },
-        rightPriceScale: { borderVisible: false },
-        timeScale: { borderVisible: false, timeVisible: true },
-        handleScroll: true,
-        handleScale: true,
-      })
+        if (chartInstance.current) {
+          chartInstance.current.remove()
+          chartInstance.current = null
+        }
 
-      // Candlestick series
-      const candleSeries = chart.addCandlestickSeries({
-        upColor:   '#22c55e',
-        downColor: '#ef4444',
-        borderUpColor:   '#22c55e',
-        borderDownColor: '#ef4444',
-        wickUpColor:   '#22c55e',
-        wickDownColor: '#ef4444',
-      })
+        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+        const textColor  = isDark ? '#888' : '#999'
+        const gridColor  = isDark ? '#2a2a2a' : '#f0f0f0'
+        const bgColor    = 'transparent'
 
-      const candleData = history
-        .filter(h => h.open && h.high && h.low && h.close)
-        .map(h => ({
-          time:  h.date,
-          open:  h.open,
-          high:  h.high,
-          low:   h.low,
-          close: h.close,
-        }))
-
-      candleSeries.setData(candleData)
-
-      // MA50 line
-      if (history.length >= 50) {
-        const ma50Series = chart.addLineSeries({
-          color: '#f59e0b',
-          lineWidth: 1,
-          priceLineVisible: false,
-          lastValueVisible: false,
-          crosshairMarkerVisible: false,
+        const chart = LW.createChart(chartRef.current, {
+          width:  chartRef.current.clientWidth,
+          height: 300,
+          layout: {
+            background: { type: LW.ColorType.Solid, color: bgColor },
+            textColor,
+          },
+          grid: {
+            vertLines: { color: gridColor },
+            horzLines: { color: gridColor },
+          },
+          rightPriceScale: { borderVisible: false },
+          timeScale: { borderVisible: false, timeVisible: false },
+          handleScroll: true,
+          handleScale: true,
         })
-        const ma50Data = history.map((h, i) => {
-          const slice = history.slice(Math.max(0, i-49), i+1).map(x => x.close).filter(Boolean)
-          if (slice.length < 50) return null
-          return { time: h.date, value: parseFloat((slice.reduce((a,b)=>a+b,0)/slice.length).toFixed(4)) }
-        }).filter(Boolean)
-        ma50Series.setData(ma50Data as any)
-      }
 
-      // MA200 line
-      if (history.length >= 200) {
-        const ma200Series = chart.addLineSeries({
-          color: '#ef4444',
-          lineWidth: 1,
-          priceLineVisible: false,
-          lastValueVisible: false,
-          crosshairMarkerVisible: false,
+        chartInstance.current = chart
+
+        // Candlestick
+        const candleSeries = chart.addCandlestickSeries({
+          upColor:        '#22c55e',
+          downColor:      '#ef4444',
+          borderUpColor:  '#22c55e',
+          borderDownColor:'#ef4444',
+          wickUpColor:    '#22c55e',
+          wickDownColor:  '#ef4444',
         })
-        const ma200Data = history.map((h, i) => {
-          const slice = history.slice(Math.max(0, i-199), i+1).map(x => x.close).filter(Boolean)
-          if (slice.length < 200) return null
-          return { time: h.date, value: parseFloat((slice.reduce((a,b)=>a+b,0)/slice.length).toFixed(4)) }
-        }).filter(Boolean)
-        ma200Series.setData(ma200Data as any)
+
+        const candleData = history
+          .filter(h => h.open && h.high && h.low && h.close && h.date)
+          .map(h => ({ time: h.date as any, open: h.open, high: h.high, low: h.low, close: h.close }))
+
+        if (candleData.length > 0) candleSeries.setData(candleData)
+
+        // MA50
+        const ma50Data: any[] = []
+        for (let i = 49; i < history.length; i++) {
+          const slice = history.slice(i - 49, i + 1).map(x => x.close).filter(Boolean)
+          if (slice.length === 50) {
+            ma50Data.push({ time: history[i].date as any, value: parseFloat((slice.reduce((a,b)=>a+b,0)/50).toFixed(4)) })
+          }
+        }
+        if (ma50Data.length > 0) {
+          const ma50Series = chart.addLineSeries({ color: '#f59e0b', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+          ma50Series.setData(ma50Data)
+        }
+
+        // MA200
+        const ma200Data: any[] = []
+        for (let i = 199; i < history.length; i++) {
+          const slice = history.slice(i - 199, i + 1).map(x => x.close).filter(Boolean)
+          if (slice.length === 200) {
+            ma200Data.push({ time: history[i].date as any, value: parseFloat((slice.reduce((a,b)=>a+b,0)/200).toFixed(4)) })
+          }
+        }
+        if (ma200Data.length > 0) {
+          const ma200Series = chart.addLineSeries({ color: '#ef4444', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false })
+          ma200Series.setData(ma200Data)
+        }
+
+        // Volume
+        const volSeries = chart.addHistogramSeries({
+          color: '#e5e7eb',
+          priceFormat: { type: 'volume' as any },
+          priceScaleId: 'vol',
+        })
+        chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } })
+        const volData = history
+          .filter(h => h.volume != null && h.date)
+          .map(h => ({ time: h.date as any, value: h.volume, color: h.close >= h.open ? '#bbf7d0' : '#fecaca' }))
+        if (volData.length > 0) volSeries.setData(volData)
+
+        chart.timeScale().fitContent()
+
+        // Resize handler
+        const ro = new ResizeObserver(() => {
+          if (chartRef.current && chartInstance.current) {
+            chartInstance.current.applyOptions({ width: chartRef.current.clientWidth })
+          }
+        })
+        ro.observe(chartRef.current)
+
+        return () => ro.disconnect()
+
+      } catch (e) {
+        console.error('Chart error:', e)
       }
-
-      // Volume histogram
-      const volumeSeries = chart.addHistogramSeries({
-        color: '#e5e7eb',
-        priceFormat: { type: 'volume' },
-        priceScaleId: 'volume',
-        scaleMargins: { top: 0.85, bottom: 0 },
-      })
-      const volumeData = history
-        .filter(h => h.volume != null)
-        .map(h => ({
-          time:  h.date,
-          value: h.volume,
-          color: h.close >= h.open ? '#bbf7d0' : '#fecaca',
-        }))
-      volumeSeries.setData(volumeData)
-
-      chart.timeScale().fitContent()
     }
 
     init()
 
-    return () => { if (chart) chart.remove() }
+    return () => {
+      cancelled = true
+      if (chartInstance.current) {
+        try { chartInstance.current.remove() } catch {}
+        chartInstance.current = null
+      }
+    }
   }, [history])
 
   return (
     <div>
       <div className="flex items-center gap-4 mb-2 text-xs text-gray-400">
-        <span className="flex items-center gap-1"><span className="w-3 h-2 bg-green-500 inline-block rounded-sm"></span>Bullish</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-2 bg-red-500 inline-block rounded-sm"></span>Bearish</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-amber-400 inline-block"></span>MA50</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-red-400 inline-block"></span>MA200</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-2 bg-gray-200 inline-block rounded-sm"></span>Volume</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-2 bg-green-500 inline-block rounded-sm"></span>Bullish</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-2 bg-red-500 inline-block rounded-sm"></span>Bearish</span>
+        <span className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-amber-400 border-dashed inline-block"></span>MA50</span>
+        <span className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-red-400 border-dashed inline-block"></span>MA200</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-2 bg-gray-200 inline-block rounded-sm"></span>Volume</span>
       </div>
-      <div ref={chartRef} style={{ width: '100%', height: 280 }} />
+      <div ref={chartRef} style={{ width: '100%', height: 300 }} />
     </div>
   )
 }
@@ -274,13 +291,10 @@ export function StockReport({ ticker }: { ticker: string }) {
         <MetricCard label="Analyst target" value={isStock && target ? `$${safe(target)}` : 'N/A'} subColor="green" />
       </div>
 
-      {/* Candlestick Chart */}
       {data.history && data.history.length > 0 && (
         <div className="card mb-5">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-gray-500">Price chart — 1 year · candlestick + volume</p>
-          </div>
-          <CandlestickChart history={data.history} ma50={data.ma50 ?? null} ma200={data.ma200 ?? null} />
+          <p className="text-sm font-medium text-gray-500 mb-3">Price chart — 1 year · candlestick + MA50 + MA200 + volume</p>
+          <CandlestickChart history={data.history} />
         </div>
       )}
 
