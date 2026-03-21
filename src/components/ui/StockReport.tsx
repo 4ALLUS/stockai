@@ -65,9 +65,10 @@ const ASSET_LABELS: Record<string, string> = {
 
 export function StockReport({ ticker }: { ticker: string }) {
   const decodedTicker = decodeURIComponent(ticker)
-  const [data, setData]       = useState<StockData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState('')
+  const [data, setData]         = useState<StockData | null>(null)
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState('')
+  const [pdfLoading, setPdfLoading] = useState(false)
 
   useEffect(() => {
     setLoading(true)
@@ -81,6 +82,17 @@ export function StockReport({ ticker }: { ticker: string }) {
       })
       .catch(() => { setError('Failed to load data'); setLoading(false) })
   }, [decodedTicker])
+
+  const handlePDF = async () => {
+    if (!data) return
+    setPdfLoading(true)
+    try {
+      const encoded = encodeURIComponent(JSON.stringify(data))
+      window.open(`/api/report/pdf?ticker=${decodedTicker}&data=${encoded}`, '_blank')
+    } finally {
+      setPdfLoading(false)
+    }
+  }
 
   if (loading) return (
     <div className="space-y-4 animate-pulse">
@@ -117,6 +129,7 @@ export function StockReport({ ticker }: { ticker: string }) {
 
   return (
     <div>
+      {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -134,8 +147,13 @@ export function StockReport({ ticker }: { ticker: string }) {
           <p className="text-xs text-gray-400 mt-1">Source: Yahoo Finance + Alpha Vantage · verified · no AI-generated numbers</p>
         </div>
         <div className="flex gap-2">
-          <button className="btn-secondary flex items-center gap-2">
-            <Download size={14}/> Download PDF
+          <button
+            onClick={handlePDF}
+            disabled={pdfLoading}
+            className="btn-secondary flex items-center gap-2"
+          >
+            <Download size={14}/>
+            {pdfLoading ? 'Generating...' : 'Download PDF'}
           </button>
           <button className="btn-primary flex items-center gap-2">
             <Plus size={14}/> Add to portfolio
@@ -143,6 +161,7 @@ export function StockReport({ ticker }: { ticker: string }) {
         </div>
       </div>
 
+      {/* Metrics */}
       <div className="grid grid-cols-4 gap-3 mb-5">
         <MetricCard label="Market Cap"     value={data.marketCap ?? 'N/A'} />
         <MetricCard label="P/E Ratio"      value={data.pe ?? 'N/A'} />
@@ -154,6 +173,7 @@ export function StockReport({ ticker }: { ticker: string }) {
         <MetricCard label="Analyst target" value={isStock && target ? `$${safe(target)}` : 'N/A'} subColor="green" />
       </div>
 
+      {/* Candlestick Chart */}
       {data.history && data.history.length > 0 && (
         <div className="card mb-5">
           <p className="text-sm font-medium text-gray-500 mb-3">Price chart — 1 year · candlestick + MA50 + MA200 + volume</p>
@@ -161,6 +181,7 @@ export function StockReport({ ticker }: { ticker: string }) {
         </div>
       )}
 
+      {/* 52W Range */}
       {high52 > 0 && low52 > 0 && (
         <div className="card mb-5">
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-3">52-week range</p>
@@ -176,6 +197,7 @@ export function StockReport({ ticker }: { ticker: string }) {
         </div>
       )}
 
+      {/* AI Analysis */}
       <div className="card mb-5">
         <div className="flex items-center gap-2 mb-3">
           <p className="text-sm font-medium text-gray-500">AI analysis</p>
@@ -184,6 +206,7 @@ export function StockReport({ ticker }: { ticker: string }) {
         <p className="text-sm text-gray-700 leading-relaxed">{data.aiSummary}</p>
       </div>
 
+      {/* Consensus / Fear&Greed / Trend */}
       {isStock ? (
         <div className="card">
           <p className="text-sm font-medium text-gray-500 mb-3">Analyst consensus</p>
