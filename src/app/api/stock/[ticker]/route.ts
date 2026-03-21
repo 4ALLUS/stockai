@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 function calcMA(closes: number[], period: number): number {
-  const valid = closes.filter(v => v != null && !isNaN(v))
+  const valid = closes.filter((v: any) => v != null && !isNaN(v))
   if (valid.length < period) return 0
   const slice = valid.slice(-period)
-  return slice.reduce((a, b) => a + b, 0) / period
+  return slice.reduce((a: number, b: number) => a + b, 0) / period
 }
 
 export async function GET(
@@ -37,8 +37,9 @@ export async function GET(
     const yahooData = await responses[0].json()
     const extraData = responses[1] ? await responses[1].json() : null
 
-    const meta   = yahooData?.chart?.result?.[0]?.meta
-    const closes = yahooData?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []
+    const meta      = yahooData?.chart?.result?.[0]?.meta
+    const closes    = yahooData?.chart?.result?.[0]?.indicators?.quote?.[0]?.close ?? []
+    const timestamps = yahooData?.chart?.result?.[0]?.timestamp ?? []
 
     if (!meta) return NextResponse.json(
       { error: `Ticker "${ticker}" not found` }, { status: 404 }
@@ -50,7 +51,6 @@ export async function GET(
     const changePct = prev > 0 ? (change / prev) * 100 : 0
     const volume    = meta.regularMarketVolume ?? 0
 
-    // Calculate MA50 and MA200 from historical closes
     const ma50  = calcMA(closes, 50)
     const ma200 = calcMA(closes, 200)
     const trend = ma50 > 0 && ma200 > 0
@@ -60,7 +60,15 @@ export async function GET(
       ? price > ma200 ? 'Above MA200 — Bullish' : 'Below MA200 — Bearish'
       : null
 
-    // Stock fundamentals
+    // Build history array with dates
+    const history = closes
+      .map((v: any, i: number) => ({
+        date:  timestamps[i] ? new Date(timestamps[i] * 1000).toISOString().split('T')[0] : null,
+        price: v != null ? parseFloat(v.toFixed(4)) : null,
+      }))
+      .filter((d: any) => d.date && d.price != null)
+      .slice(-252)
+
     const overview      = isStock ? extraData : null
     const analystTarget = parseFloat(overview?.AnalystTargetPrice ?? '0') || 0
     const strongBuy     = parseInt(overview?.AnalystRatingStrongBuy ?? '0')
@@ -74,7 +82,6 @@ export async function GET(
       ? (bullPct >= 60 ? 'Buy' : bullPct >= 40 ? 'Hold' : 'Sell')
       : 'N/A'
 
-    // Crypto Fear & Greed
     const fng      = isCrypto ? extraData?.data?.[0] : null
     const fngValue = fng ? parseInt(fng.value) : null
     const fngLabel = fng?.value_classification ?? null
@@ -123,6 +130,7 @@ export async function GET(
       ma200:          ma200 > 0 ? parseFloat(ma200.toFixed(4)) : null,
       trend,
       trendVsMA200,
+      history,
     })
 
   } catch (err) {
