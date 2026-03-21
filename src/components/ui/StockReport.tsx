@@ -85,7 +85,7 @@ function CandlestickChart({ history }: { history: HistoryPoint[] }) {
         const gridColor  = isDark ? '#2a2a2a' : '#f0f0f0'
         const bgColor    = 'transparent'
 
-        const chart = LW.createChart(chartRef.current, {
+        const chart: any = LW.createChart(chartRef.current, {
           width:  chartRef.current.clientWidth,
           height: 300,
           layout: {
