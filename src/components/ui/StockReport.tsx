@@ -7,6 +7,11 @@ import { createClient } from '@supabase/supabase-js'
 
 const CandlestickChart = dynamic(() => import('./CandlestickChart'), { ssr: false })
 
+const supabaseClient = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
 interface HistoryPoint {
   date: string
   price: number
@@ -64,11 +69,6 @@ const ASSET_LABELS: Record<string, string> = {
   index:     'Market Index',
 }
 
-const supabaseClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
 export function StockReport({ ticker }: { ticker: string }) {
   const decodedTicker               = decodeURIComponent(ticker)
   const [data, setData]             = useState<StockData | null>(null)
@@ -121,36 +121,26 @@ export function StockReport({ ticker }: { ticker: string }) {
     setWatchlistLoading(true)
     try {
       const { data: { session } } = await supabaseClient.auth.getSession()
-      const token = session?.access_token ?? ''
-
-      if (!token) {
+      if (!session) {
         alert('Please sign in to add to watchlist')
         setWatchlistLoading(false)
         return
       }
 
-      const res = await fetch('/api/watchlist', {
-        method:  'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          ticker:    decodedTicker,
-          name:      data.name,
-          price,
-          change,
-          changePct,
-        }),
-      })
+      const { error: dbError } = await supabaseClient.from('watchlist').upsert({
+        user_id:    session.user.id,
+        ticker:     decodedTicker,
+        name:       data.name,
+        price,
+        change,
+        change_pct: changePct,
+        added_at:   new Date().toISOString(),
+      }, { onConflict: 'user_id,ticker' })
 
-      if (res.ok) setWatchlisted(true)
-      else {
-        const err = await res.json()
-        alert('Error: ' + (err.error ?? 'Unknown error'))
-      }
-    } catch {
-      alert('Error saving to watchlist')
+      if (dbError) throw dbError
+      setWatchlisted(true)
+    } catch (e: any) {
+      alert('Error: ' + e.message)
     } finally {
       setWatchlistLoading(false)
     }
@@ -297,13 +287,10 @@ export function StockReport({ ticker }: { ticker: string }) {
         <p className="text-sm text-gray-700 leading-relaxed">{data.aiSummary}</p>
       </div>
 
-      {/* Consensus / Fear&Greed / Trend */}
       {isStock ? (
         <>
-          {/* Analyst consensus */}
           <div className="card mb-5">
             <p className="text-sm font-medium text-gray-500 mb-4">Analyst consensus</p>
-
             {total > 0 && (
               <div className="mb-5">
                 <div className="flex rounded-full overflow-hidden h-5 mb-2">
@@ -327,7 +314,6 @@ export function StockReport({ ticker }: { ticker: string }) {
                 </div>
               </div>
             )}
-
             <div className="flex items-end gap-4">
               <div className="flex-1">
                 <div className="flex gap-2 h-20 items-end mb-1">
@@ -364,7 +350,6 @@ export function StockReport({ ticker }: { ticker: string }) {
             </div>
           </div>
 
-          {/* Projections */}
           {projections.length > 0 && (
             <div className="card mb-5">
               <p className="text-sm font-medium text-gray-500 mb-4">Statistical projections — based on analyst target</p>
@@ -392,7 +377,6 @@ export function StockReport({ ticker }: { ticker: string }) {
             </div>
           )}
 
-          {/* Verdict */}
           <div className="card border-l-4 border-amber-400 bg-amber-50">
             <p className="text-sm font-bold text-amber-800 mb-2">Verdict — {decodedTicker}</p>
             <p className="text-sm text-gray-700 leading-relaxed">
