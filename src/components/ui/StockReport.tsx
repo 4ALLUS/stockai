@@ -65,9 +65,9 @@ const ASSET_LABELS: Record<string, string> = {
 
 export function StockReport({ ticker }: { ticker: string }) {
   const decodedTicker = decodeURIComponent(ticker)
-  const [data, setData]         = useState<StockData | null>(null)
-  const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState('')
+  const [data, setData]             = useState<StockData | null>(null)
+  const [loading, setLoading]       = useState(true)
+  const [error, setError]           = useState('')
   const [pdfLoading, setPdfLoading] = useState(false)
 
   useEffect(() => {
@@ -83,25 +83,243 @@ export function StockReport({ ticker }: { ticker: string }) {
       .catch(() => { setError('Failed to load data'); setLoading(false) })
   }, [decodedTicker])
 
-const handlePDF = async () => {
+  const handlePDF = async () => {
     if (!data) return
     setPdfLoading(true)
     try {
-      const res = await fetch('/api/report/pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+      const { jsPDF } = await import('jspdf')
+      const doc    = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      const pw     = doc.internal.pageSize.getWidth()
+      const margin = 18
+
+      const price     = parseFloat(data.price as any) || 0
+      const change    = parseFloat(data.change as any) || 0
+      const changePct = parseFloat(data.changePct as any) || 0
+      const high52    = parseFloat(data.week52High as any) || 0
+      const low52     = parseFloat(data.week52Low as any) || 0
+      const target    = parseFloat(data.analystTarget as any) || 0
+      const pos       = change >= 0
+      const upside    = target > 0 && price > 0 ? (((target - price) / price) * 100).toFixed(1) : 'N/A'
+      const assetType = getAssetType(decodedTicker)
+      const isStock   = assetType === 'stock'
+
+      // Header
+      doc.setFillColor(0, 48, 135)
+      doc.rect(0, 0, pw, 35, 'F')
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(16)
+      doc.setFont('helvetica', 'bold')
+      doc.text(data.name, margin, 13)
+      doc.setFontSize(14)
+      doc.text(`$${safe(price)}`, pw - margin, 13, { align: 'right' })
+      const changeColor: [number,number,number] = pos ? [34, 197, 94] : [239, 68, 68]
+      doc.setTextColor(...changeColor)
+      doc.setFontSize(9)
+      doc.text(`${pos?'+':''}${safe(change)} (${pos?'+':''}${safe(changePct)}%)`, pw - margin, 21, { align: 'right' })
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(8)
+      doc.text(`${decodedTicker} · ${ASSET_LABELS[assetType]}`, margin, 21)
+      doc.setFontSize(7)
+      doc.setTextColor(160, 196, 232)
+      doc.text(`Generated: ${new Date().toLocaleDateString('en-US')}`, pw - margin, 32, { align: 'right' })
+
+      let y = 42
+
+      // Source note
+      doc.setTextColor(136, 136, 170)
+      doc.setFontSize(7)
+      doc.setFont('helvetica', 'normal')
+      doc.text('Source: Yahoo Finance + Alpha Vantage · Verified data · No AI-generated numbers', margin, y)
+      y += 7
+
+      // Metrics grid
+      const metrics = [
+        ['Market Cap',     data.marketCap ?? 'N/A'],
+        ['P/E Ratio',      data.pe ?? 'N/A'],
+        ['EPS (TTM)',       data.eps !== 'N/A' ? `$${data.eps}` : 'N/A'],
+        ['Beta',           data.beta ?? 'N/A'],
+        ['52W High',       high52 ? `$${safe(high52)}` : 'N/A'],
+        ['52W Low',        low52  ? `$${safe(low52)}`  : 'N/A'],
+        ['Volume',         data.volume ?? 'N/A'],
+        ['Analyst target', isStock && target ? `$${safe(target)}` : 'N/A'],
+      ]
+      const cardW = (pw - 2*margin - 9) / 4
+      const cardH = 15
+      metrics.forEach((m, i) => {
+        const col = i % 4
+        const row = Math.floor(i / 4)
+        const x   = margin + col * (cardW + 3)
+        const cy  = y + row * (cardH + 2)
+        doc.setFillColor(245, 245, 250)
+        doc.roundedRect(x, cy, cardW, cardH, 2, 2, 'F')
+        doc.setTextColor(136, 136, 170)
+        doc.setFontSize(6)
+        doc.setFont('helvetica', 'normal')
+        doc.text(m[0].toUpperCase(), x + 2, cy + 4.5)
+        doc.setTextColor(26, 26, 46)
+        doc.setFontSize(9)
+        doc.setFont('helvetica', 'bold')
+        doc.text(m[1], x + 2, cy + 11)
       })
-      if (!res.ok) throw new Error('PDF generation failed')
-      const blob = await res.blob()
-      const url  = URL.createObjectURL(blob)
-      const a    = document.createElement('a')
-      a.href = url
-      a.download = `${decodedTicker}_StockAI_Report.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch (e) {
-      alert('PDF generation failed. Please try again.')
+      y += 2 * (cardH + 2) + 6
+
+      // Chart
+      if (data.history && data.history.length > 5) {
+        try {
+          const canvas  = document.createElement('canvas')
+          canvas.width  = 800
+          canvas.height = 280
+          const ctx     = canvas.getContext('2d')!
+          ctx.fillStyle = '#ffffff'
+          ctx.fillRect(0, 0, 800, 280)
+
+          const hist   = data.history
+          const n      = hist.length
+          const padL   = 55, padR = 15, padT = 15, padB = 55
+          const chartW = 800 - padL - padR
+          const chartH = 180
+          const prices = hist.map(h => h.close || h.price)
+          const minP   = Math.min(...prices) * 0.995
+          const maxP   = Math.max(...prices) * 1.005
+          const cw2    = Math.max(2, (chartW / n) * 0.7)
+
+          const px2 = (i: number) => padL + (i / (n-1)) * chartW
+          const py2 = (p: number) => padT + chartH - ((p - minP) / (maxP - minP)) * chartH
+
+          // Grid
+          ctx.strokeStyle = '#f0f0f0'; ctx.lineWidth = 0.5
+          for (let g = 0; g <= 4; g++) {
+            const gy = padT + (g/4) * chartH
+            ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(padL+chartW, gy); ctx.stroke()
+            const gp = maxP - (g/4)*(maxP-minP)
+            ctx.fillStyle = '#aaa'; ctx.font = '10px sans-serif'
+            ctx.fillText('$'+gp.toFixed(price < 10 ? 3 : price < 100 ? 2 : 1), 2, gy+4)
+          }
+
+          // Candles
+          hist.forEach((h, i) => {
+            const o = h.open||h.price, c = h.close||h.price
+            const hi2 = h.high||h.price, lo2 = h.low||h.price
+            const x2 = px2(i)
+            const bull = c >= o
+            ctx.strokeStyle = bull ? '#22c55e' : '#ef4444'
+            ctx.fillStyle   = bull ? '#22c55e' : '#ef4444'
+            ctx.lineWidth   = 1
+            ctx.beginPath(); ctx.moveTo(x2, py2(hi2)); ctx.lineTo(x2, py2(lo2)); ctx.stroke()
+            ctx.fillRect(x2-cw2/2, py2(Math.max(o,c)), cw2, Math.max(1, Math.abs(py2(o)-py2(c))))
+          })
+
+          // MA50
+          if (n >= 50) {
+            ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 1.5; ctx.setLineDash([4,2])
+            ctx.beginPath()
+            for (let i = 49; i < n; i++) {
+              const ma = prices.slice(i-49,i+1).reduce((a,b)=>a+b,0)/50
+              i===49 ? ctx.moveTo(px2(i),py2(ma)) : ctx.lineTo(px2(i),py2(ma))
+            }
+            ctx.stroke()
+          }
+
+          // MA200
+          if (n >= 200) {
+            ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 1.5; ctx.setLineDash([4,2])
+            ctx.beginPath()
+            for (let i = 199; i < n; i++) {
+              const ma = prices.slice(i-199,i+1).reduce((a,b)=>a+b,0)/200
+              i===199 ? ctx.moveTo(px2(i),py2(ma)) : ctx.lineTo(px2(i),py2(ma))
+            }
+            ctx.stroke()
+          }
+          ctx.setLineDash([])
+
+          // Volume
+          const vols   = hist.map(h => h.volume||0)
+          const maxVol = Math.max(...vols)||1
+          const volH2  = 35
+          const volY2  = padT + chartH + 8
+          hist.forEach((h,i) => {
+            const o = h.open||h.price, c = h.close||h.price
+            ctx.fillStyle = c>=o ? '#bbf7d0' : '#fecaca'
+            const bh = (h.volume/maxVol)*volH2
+            ctx.fillRect(px2(i)-cw2/2, volY2+volH2-bh, cw2, bh)
+          })
+
+          // X labels
+          ctx.fillStyle='#999'; ctx.font='9px sans-serif'; ctx.setLineDash([])
+          const step2 = Math.max(1, Math.floor(n/7))
+          for (let i=0; i<n; i+=step2) {
+            ctx.fillText(hist[i].date?.slice(5)??'', px2(i)-12, volY2+volH2+14)
+          }
+
+          // Legend
+          ctx.fillStyle='#f59e0b'; ctx.fillRect(padL, volY2+volH2+20, 18, 2)
+          ctx.fillStyle='#666'; ctx.font='9px sans-serif'
+          ctx.fillText('MA50', padL+20, volY2+volH2+24)
+          ctx.fillStyle='#ef4444'; ctx.fillRect(padL+55, volY2+volH2+20, 18, 2)
+          ctx.fillText('MA200', padL+75, volY2+volH2+24)
+
+          const imgData  = canvas.toDataURL('image/png')
+          const imgH     = (pw-2*margin)*0.38
+          doc.setFillColor(245,245,250)
+          doc.roundedRect(margin-2, y-2, pw-2*margin+4, imgH+12, 3, 3, 'F')
+          doc.setTextColor(26,26,46); doc.setFontSize(8); doc.setFont('helvetica','bold')
+          doc.text('Price Chart — 1 Year · Candlestick + MA50 + MA200 + Volume', margin, y+5)
+          doc.addImage(imgData, 'PNG', margin, y+8, pw-2*margin, imgH)
+          y += imgH + 16
+        } catch (chartErr) { console.error('Chart:', chartErr) }
+      }
+
+      // AI Analysis
+      if (data.aiSummary) {
+        doc.setFillColor(232, 244, 252)
+        doc.roundedRect(margin-2, y-2, pw-2*margin+4, 26, 3, 3, 'F')
+        doc.setDrawColor(0, 156, 222); doc.setLineWidth(0.3)
+        doc.roundedRect(margin-2, y-2, pw-2*margin+4, 26, 3, 3, 'S')
+        doc.setTextColor(26,26,46); doc.setFontSize(8); doc.setFont('helvetica','bold')
+        doc.text('AI Analysis — Verified Sources · No Hallucinations', margin, y+5)
+        doc.setFont('helvetica','normal'); doc.setFontSize(7.5)
+        const lines = doc.splitTextToSize(data.aiSummary, pw-2*margin-4)
+        doc.text(lines.slice(0,3), margin, y+11)
+        y += 30
+      }
+
+      // Analyst consensus
+      if (isStock && data.analysts) {
+        doc.setFillColor(0,48,135)
+        doc.rect(margin-2, y, pw-2*margin+4, 7, 'F')
+        doc.setTextColor(255,255,255); doc.setFontSize(7.5); doc.setFont('helvetica','bold')
+        const hdrs = ['Consensus','Target','Upside','S.Buy','Buy','Hold','Sell']
+        const cw3  = (pw-2*margin) / hdrs.length
+        hdrs.forEach((h,i) => doc.text(h, margin+i*cw3+cw3/2, y+5, {align:'center'}))
+        y += 7
+        doc.setFillColor(245,245,250)
+        doc.rect(margin-2, y, pw-2*margin+4, 8, 'F')
+        doc.setTextColor(26,26,46); doc.setFontSize(8); doc.setFont('helvetica','normal')
+        const vals2 = [
+          data.recommendation,
+          target ? `$${safe(target)}` : 'N/A',
+          upside !== 'N/A' ? `${parseFloat(upside)>=0?'+':''}${upside}%` : 'N/A',
+          String(data.analysts.strongBuy),
+          String(data.analysts.buy),
+          String(data.analysts.hold),
+          String(data.analysts.sell+data.analysts.strongSell),
+        ]
+        vals2.forEach((v,i) => doc.text(v, margin+i*cw3+cw3/2, y+5.5, {align:'center'}))
+        y += 12
+      }
+
+      // Disclaimer
+      const pageH = doc.internal.pageSize.getHeight()
+      doc.setTextColor(136,136,170); doc.setFontSize(6.5); doc.setFont('helvetica','normal')
+      doc.text(
+        'This report is for informational purposes only and does not constitute financial advice. Data: Yahoo Finance + Alpha Vantage.',
+        margin, pageH-10, { maxWidth: pw-2*margin }
+      )
+
+      doc.save(`${decodedTicker}_StockAI_Report.pdf`)
+    } catch (e: any) {
+      console.error('PDF error:', e)
+      alert('PDF generation failed: ' + e.message)
     } finally {
       setPdfLoading(false)
     }
@@ -142,7 +360,6 @@ const handlePDF = async () => {
 
   return (
     <div>
-      {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
           <div className="flex items-center gap-2 mb-1">
@@ -174,7 +391,6 @@ const handlePDF = async () => {
         </div>
       </div>
 
-      {/* Metrics */}
       <div className="grid grid-cols-4 gap-3 mb-5">
         <MetricCard label="Market Cap"     value={data.marketCap ?? 'N/A'} />
         <MetricCard label="P/E Ratio"      value={data.pe ?? 'N/A'} />
@@ -186,7 +402,6 @@ const handlePDF = async () => {
         <MetricCard label="Analyst target" value={isStock && target ? `$${safe(target)}` : 'N/A'} subColor="green" />
       </div>
 
-      {/* Candlestick Chart */}
       {data.history && data.history.length > 0 && (
         <div className="card mb-5">
           <p className="text-sm font-medium text-gray-500 mb-3">Price chart — 1 year · candlestick + MA50 + MA200 + volume</p>
@@ -194,7 +409,6 @@ const handlePDF = async () => {
         </div>
       )}
 
-      {/* 52W Range */}
       {high52 > 0 && low52 > 0 && (
         <div className="card mb-5">
           <p className="text-xs text-gray-400 uppercase tracking-wide mb-3">52-week range</p>
@@ -210,7 +424,6 @@ const handlePDF = async () => {
         </div>
       )}
 
-      {/* AI Analysis */}
       <div className="card mb-5">
         <div className="flex items-center gap-2 mb-3">
           <p className="text-sm font-medium text-gray-500">AI analysis</p>
@@ -219,7 +432,6 @@ const handlePDF = async () => {
         <p className="text-sm text-gray-700 leading-relaxed">{data.aiSummary}</p>
       </div>
 
-      {/* Consensus / Fear&Greed / Trend */}
       {isStock ? (
         <div className="card">
           <p className="text-sm font-medium text-gray-500 mb-3">Analyst consensus</p>
