@@ -3,12 +3,8 @@ import { useEffect, useState } from 'react'
 import { Download, Plus, TrendingUp, TrendingDown, Check } from 'lucide-react'
 import { MetricCard } from './MetricCard'
 import dynamic from 'next/dynamic'
-import { createBrowserClient } from '@supabase/ssr'
+import { createClient } from '@/lib/supabase/client'
 const CandlestickChart = dynamic(() => import('./CandlestickChart'), { ssr: false })
-const supabaseClient = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
 
 interface HistoryPoint {
   date: string
@@ -118,24 +114,31 @@ export function StockReport({ ticker }: { ticker: string }) {
     if (!data) return
     setWatchlistLoading(true)
     try {
-      const { data: { session } } = await supabaseClient.auth.getSession()
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
       if (!session) {
         alert('Please sign in to add to watchlist')
         setWatchlistLoading(false)
         return
       }
 
-      const { error: dbError } = await supabaseClient.from('watchlist').upsert({
-        user_id:    session.user.id,
-        ticker:     decodedTicker,
-        name:       data.name,
-        price,
-        change,
-        change_pct: changePct,
-        added_at:   new Date().toISOString(),
-      }, { onConflict: 'user_id,ticker' })
+      const res = await fetch('/api/watchlis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          ticker: decodedTicker,
+          name: data.name,
+          price,
+          change,
+          changePct,
+        }),
+      })
 
-      if (dbError) throw dbError
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Failed to save')
       setWatchlisted(true)
     } catch (e: any) {
       alert('Error: ' + e.message)
