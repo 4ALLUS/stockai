@@ -83,12 +83,25 @@ export function StockReport({ ticker }: { ticker: string }) {
       .catch(() => { setError('Failed to load data'); setLoading(false) })
   }, [decodedTicker])
 
-  const handlePDF = async () => {
+const handlePDF = async () => {
     if (!data) return
     setPdfLoading(true)
     try {
-      const encoded = encodeURIComponent(JSON.stringify(data))
-      window.open(`/api/report/pdf?ticker=${decodedTicker}&data=${encoded}`, '_blank')
+      const res = await fetch('/api/report/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) throw new Error('PDF generation failed')
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href = url
+      a.download = `${decodedTicker}_StockAI_Report.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      alert('PDF generation failed. Please try again.')
     } finally {
       setPdfLoading(false)
     }
