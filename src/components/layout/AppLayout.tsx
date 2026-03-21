@@ -52,7 +52,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Trial badge */}
         <div className="mt-auto">
           <div className="bg-amber-50 text-amber-800 text-[11px] text-center py-1.5 px-2 rounded-lg mb-3">
-            Trial: 3 days left
+            Trial: 1 days left
           </div>
           <Link
             href="/api/auth/signout"

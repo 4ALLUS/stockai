@@ -46,7 +46,7 @@ export default function SignupPage() {
 
         {/* Trial banner */}
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center text-xs text-amber-800 mb-5">
-          3 days free · then $19/month · cancel anytime
+          1 days free · then $19/month · cancel anytime
         </div>
 
         <form onSubmit={handleSignup} className="space-y-3">
