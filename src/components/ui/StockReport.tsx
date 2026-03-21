@@ -115,30 +115,24 @@ export function StockReport({ ticker }: { ticker: string }) {
     setWatchlistLoading(true)
     try {
       const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      if (userError || !user) {
         alert('Please sign in to add to watchlist')
         setWatchlistLoading(false)
         return
       }
 
-      const res = await fetch('/api/watchlis', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          ticker: decodedTicker,
-          name: data.name,
-          price,
-          change,
-          changePct,
-        }),
-      })
+      const { error: dbError } = await supabase.from('watchlist').upsert({
+        user_id:    user.id,
+        ticker:     decodedTicker,
+        name:       data.name,
+        price,
+        change,
+        change_pct: changePct,
+        added_at:   new Date().toISOString(),
+      }, { onConflict: 'user_id,ticker' })
 
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Failed to save')
+      if (dbError) throw dbError
       setWatchlisted(true)
     } catch (e: any) {
       alert('Error: ' + e.message)
