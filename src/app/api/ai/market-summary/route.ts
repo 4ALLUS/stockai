@@ -5,7 +5,7 @@ export async function GET() {
     const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY
     if (!ANTHROPIC_KEY) return NextResponse.json({ summary: 'API key missing.' })
 
-    const tickers = ['SPY', 'QQQ', 'NVDA', 'AAPL']
+    const tickers = ['AAPL', 'NVDA', 'MSFT', 'TSLA']
     const prices = await Promise.all(
       tickers.map(t =>
         fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${t}?interval=1d&range=1d`, {
