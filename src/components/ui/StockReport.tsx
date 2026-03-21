@@ -33,10 +33,11 @@ function safe(n: any, decimals = 2): string {
 }
 
 function getAssetType(ticker: string): 'stock' | 'crypto' | 'forex' | 'commodity' | 'index' {
-  if (ticker.includes('-USD') || ticker.includes('-BTC')) return 'crypto'
-  if (ticker.includes('=X')) return 'forex'
-  if (ticker.includes('=F')) return 'commodity'
-  if (ticker.startsWith('^')) return 'index'
+  const t = decodeURIComponent(ticker)
+  if (t.includes('-USD') || t.includes('-BTC')) return 'crypto'
+  if (t.includes('=X')) return 'forex'
+  if (t.includes('=F')) return 'commodity'
+  if (t.startsWith('^')) return 'index'
   return 'stock'
 }
 
@@ -49,6 +50,7 @@ const ASSET_LABELS: Record<string, string> = {
 }
 
 export function StockReport({ ticker }: { ticker: string }) {
+  const decodedTicker = decodeURIComponent(ticker)
   const [data, setData]       = useState<StockData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
@@ -56,7 +58,7 @@ export function StockReport({ ticker }: { ticker: string }) {
   useEffect(() => {
     setLoading(true)
     setError('')
-    fetch(`/api/stock/${ticker}`)
+    fetch(`/api/stock/${encodeURIComponent(decodedTicker)}`)
       .then(r => r.json())
       .then(d => {
         if (d.error) setError(d.error)
@@ -64,7 +66,7 @@ export function StockReport({ ticker }: { ticker: string }) {
         setLoading(false)
       })
       .catch(() => { setError('Failed to load data'); setLoading(false) })
-  }, [ticker])
+  }, [decodedTicker])
 
   if (loading) return (
     <div className="space-y-4 animate-pulse">
@@ -95,7 +97,7 @@ export function StockReport({ ticker }: { ticker: string }) {
   const pos       = change >= 0
   const rangePct  = high52 > low52 ? ((price - low52) / (high52 - low52)) * 100 : 50
   const upside    = target > 0 && price > 0 ? (((target - price) / price) * 100).toFixed(1) : 'N/A'
-  const assetType = getAssetType(ticker)
+  const assetType = getAssetType(decodedTicker)
   const isStock   = assetType === 'stock'
   const isCrypto  = assetType === 'crypto'
 
@@ -105,7 +107,7 @@ export function StockReport({ ticker }: { ticker: string }) {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <h1 className="text-xl font-medium text-gray-900">{data.name}</h1>
-            <span className="badge badge-blue">{ticker}</span>
+            <span className="badge badge-blue">{decodedTicker}</span>
             <span className="badge badge-amber text-[10px]">{ASSET_LABELS[assetType]}</span>
           </div>
           <div className="flex items-baseline gap-2">
@@ -247,17 +249,13 @@ export function StockReport({ ticker }: { ticker: string }) {
               <div className="flex items-center justify-between py-2 border-b border-gray-50">
                 <span className="text-sm text-gray-500">MA50 vs MA200</span>
                 <span className={`text-sm font-medium px-2 py-0.5 rounded-full ${
-                  data.trend?.includes('Bullish')
-                    ? 'bg-green-50 text-green-700'
-                    : 'bg-red-50 text-red-700'
+                  data.trend?.includes('Bullish') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
                 }`}>{data.trend}</span>
               </div>
               <div className="flex items-center justify-between py-2 border-b border-gray-50">
                 <span className="text-sm text-gray-500">Price vs MA200</span>
                 <span className={`text-sm font-medium px-2 py-0.5 rounded-full ${
-                  data.trendVsMA200?.includes('Bullish')
-                    ? 'bg-green-50 text-green-700'
-                    : 'bg-red-50 text-red-700'
+                  data.trendVsMA200?.includes('Bullish') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
                 }`}>{data.trendVsMA200}</span>
               </div>
               <div className="flex items-center justify-between py-2 border-b border-gray-50">
