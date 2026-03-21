@@ -19,11 +19,29 @@ interface StockData {
   analystTarget: number
   recommendation: string
   aiSummary: string
+  analysts?: { strongBuy: number; buy: number; hold: number; sell: number; strongSell: number; bullPct: number } | null
+  fearGreed?: { value: number | null; label: string | null } | null
 }
 
 function safe(n: any, decimals = 2): string {
   const num = parseFloat(n)
   return isNaN(num) ? 'N/A' : num.toFixed(decimals)
+}
+
+function getAssetType(ticker: string): 'stock' | 'crypto' | 'forex' | 'commodity' | 'index' {
+  if (ticker.includes('-USD') || ticker.includes('-BTC')) return 'crypto'
+  if (ticker.includes('=X')) return 'forex'
+  if (ticker.includes('=F')) return 'commodity'
+  if (ticker.startsWith('^')) return 'index'
+  return 'stock'
+}
+
+const ASSET_LABELS: Record<string, string> = {
+  stock:     'Stock',
+  crypto:    'Cryptocurrency',
+  forex:     'Forex pair',
+  commodity: 'Futures / Commodity',
+  index:     'Market Index',
 }
 
 export function StockReport({ ticker }: { ticker: string }) {
@@ -73,6 +91,8 @@ export function StockReport({ ticker }: { ticker: string }) {
   const pos       = change >= 0
   const rangePct  = high52 > low52 ? ((price - low52) / (high52 - low52)) * 100 : 50
   const upside    = target > 0 && price > 0 ? (((target - price) / price) * 100).toFixed(1) : 'N/A'
+  const assetType = getAssetType(ticker)
+  const isStock   = assetType === 'stock'
 
   return (
     <div>
@@ -81,6 +101,7 @@ export function StockReport({ ticker }: { ticker: string }) {
           <div className="flex items-center gap-2 mb-1">
             <h1 className="text-xl font-medium text-gray-900">{data.name}</h1>
             <span className="badge badge-blue">{ticker}</span>
+            <span className="badge badge-amber text-[10px]">{ASSET_LABELS[assetType]}</span>
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-medium">${safe(price)}</span>
@@ -89,7 +110,7 @@ export function StockReport({ ticker }: { ticker: string }) {
               {pos ? '+' : ''}{safe(change)} ({pos ? '+' : ''}{safe(changePct)}%)
             </span>
           </div>
-          <p className="text-xs text-gray-400 mt-1">Source: Yahoo Finance · verified · no AI-generated numbers</p>
+          <p className="text-xs text-gray-400 mt-1">Source: Yahoo Finance + Alpha Vantage · verified · no AI-generated numbers</p>
         </div>
         <div className="flex gap-2">
           <button className="btn-secondary flex items-center gap-2">
@@ -109,7 +130,7 @@ export function StockReport({ ticker }: { ticker: string }) {
         <MetricCard label="52W High"       value={high52 ? `$${safe(high52)}` : 'N/A'} subColor="green" />
         <MetricCard label="52W Low"        value={low52  ? `$${safe(low52)}`  : 'N/A'} subColor="red" />
         <MetricCard label="Volume"         value={data.volume ?? 'N/A'} />
-        <MetricCard label="Analyst target" value={target ? `$${safe(target)}` : 'N/A'} subColor="green" />
+        <MetricCard label="Analyst target" value={isStock && target ? `$${safe(target)}` : 'N/A'} subColor="green" />
       </div>
 
       {high52 > 0 && low52 > 0 && (
@@ -135,45 +156,90 @@ export function StockReport({ ticker }: { ticker: string }) {
         <p className="text-sm text-gray-700 leading-relaxed">{data.aiSummary}</p>
       </div>
 
-      <div className="card">
-        <p className="text-sm font-medium text-gray-500 mb-3">Analyst consensus</p>
-        <div className="flex items-center gap-4">
-          <div className="text-center">
-            <p className="text-2xl font-medium text-green-600">{data.recommendation}</p>
-            <p className="text-xs text-gray-400">Consensus</p>
-          </div>
-          <div className="flex-1">
-            <div className="flex gap-1 h-8 items-end mb-1">
-              {[
-                { label: 'S.Buy', val: 8,  color: 'bg-green-600' },
-                { label: 'Buy',   val: 18, color: 'bg-green-400' },
-                { label: 'Hold',  val: 12, color: 'bg-gray-300' },
-                { label: 'Sell',  val: 3,  color: 'bg-red-400' },
-                { label: 'S.Sell',val: 1,  color: 'bg-red-600' },
-              ].map(b => (
-                <div key={b.label} className="flex-1 flex flex-col items-center gap-1">
-                  <span className="text-[10px] text-gray-500">{b.val}</span>
-                  <div className={`w-full rounded-sm ${b.color}`} style={{ height: `${(b.val/18)*100}%` }} />
-                </div>
-              ))}
+      {isStock ? (
+        <div className="card">
+          <p className="text-sm font-medium text-gray-500 mb-3">Analyst consensus</p>
+          <div className="flex items-center gap-4">
+            <div className="text-center">
+              <p className={`text-2xl font-medium ${
+                data.recommendation === 'Buy' ? 'text-green-600' :
+                data.recommendation === 'Sell' ? 'text-red-600' : 'text-gray-700'
+              }`}>{data.recommendation}</p>
+              <p className="text-xs text-gray-400">Consensus</p>
             </div>
-            <div className="flex gap-1">
-              {['S.Buy','Buy','Hold','Sell','S.Sell'].map(l => (
-                <span key={l} className="flex-1 text-center text-[9px] text-gray-400">{l}</span>
-              ))}
+            <div className="flex-1">
+              <div className="flex gap-1 h-8 items-end mb-1">
+                {[
+                  { label: 'S.Buy', val: data.analysts?.strongBuy ?? 0,  color: 'bg-green-600' },
+                  { label: 'Buy',   val: data.analysts?.buy ?? 0,        color: 'bg-green-400' },
+                  { label: 'Hold',  val: data.analysts?.hold ?? 0,       color: 'bg-gray-300' },
+                  { label: 'Sell',  val: data.analysts?.sell ?? 0,       color: 'bg-red-400' },
+                  { label: 'S.Sell',val: data.analysts?.strongSell ?? 0, color: 'bg-red-600' },
+                ].map(b => {
+                  const maxVal = Math.max(
+                    data.analysts?.strongBuy ?? 0,
+                    data.analysts?.buy ?? 0,
+                    data.analysts?.hold ?? 0,
+                    data.analysts?.sell ?? 0,
+                    data.analysts?.strongSell ?? 0,
+                    1
+                  )
+                  return (
+                    <div key={b.label} className="flex-1 flex flex-col items-center gap-1">
+                      <span className="text-[10px] text-gray-500">{b.val}</span>
+                      <div className={`w-full rounded-sm ${b.color}`} style={{ height: `${(b.val/maxVal)*100}%` }} />
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="flex gap-1">
+                {['S.Buy','Buy','Hold','Sell','S.Sell'].map(l => (
+                  <span key={l} className="flex-1 text-center text-[9px] text-gray-400">{l}</span>
+                ))}
+              </div>
             </div>
-          </div>
-          <div className="text-right">
-            <p className="text-xl font-medium text-gray-900">${safe(target)}</p>
-            <p className="text-xs text-gray-400">Mean target</p>
-            {upside !== 'N/A' && (
-              <p className={`text-xs mt-0.5 ${parseFloat(upside) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {parseFloat(upside) >= 0 ? '+' : ''}{upside}% upside
-              </p>
-            )}
+            <div className="text-right">
+              <p className="text-xl font-medium text-gray-900">${safe(target)}</p>
+              <p className="text-xs text-gray-400">Mean target</p>
+              {upside !== 'N/A' && (
+                <p className={`text-xs mt-0.5 ${parseFloat(upside) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {parseFloat(upside) >= 0 ? '+' : ''}{upside}% upside
+                </p>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      ) : assetType === 'crypto' && data.fearGreed?.value != null ? (
+        <div className="card">
+          <p className="text-sm font-medium text-gray-500 mb-3">Market sentiment — Fear & Greed Index</p>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm text-gray-600">Current sentiment</span>
+            <span className={`text-xl font-medium ${
+              data.fearGreed.value >= 60 ? 'text-green-600' :
+              data.fearGreed.value >= 40 ? 'text-amber-600' : 'text-red-600'
+            }`}>{data.fearGreed.value} — {data.fearGreed.label}</span>
+          </div>
+          <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-2">
+            <div
+              className={`h-full rounded-full transition-all ${
+                data.fearGreed.value >= 60 ? 'bg-green-500' :
+                data.fearGreed.value >= 40 ? 'bg-amber-400' : 'bg-red-500'
+              }`}
+              style={{ width: `${data.fearGreed.value}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-xs text-gray-400">
+            <span>Extreme Fear (0)</span>
+            <span>Neutral (50)</span>
+            <span>Extreme Greed (100)</span>
+          </div>
+        </div>
+      ) : (
+        <div className="card">
+          <p className="text-sm font-medium text-gray-500 mb-2">Asset type</p>
+          <p className="text-sm text-gray-500">{ASSET_LABELS[assetType]} — no analyst consensus available</p>
+        </div>
+      )}
     </div>
   )
 }
