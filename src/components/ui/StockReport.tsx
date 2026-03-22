@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react'
 import { Download, Plus, TrendingUp, TrendingDown, Check } from 'lucide-react'
 import { MetricCard } from './MetricCard'
 import dynamic from 'next/dynamic'
-import { createClient } from '@/lib/supabase/client'
 const CandlestickChart = dynamic(() => import('./CandlestickChart'), { ssr: false })
 
 interface HistoryPoint {
@@ -114,44 +113,25 @@ export function StockReport({ ticker }: { ticker: string }) {
     if (!data) return
     setWatchlistLoading(true)
     try {
-      const supabase = createClient()
-      const { data: { user }, error: userError } = await supabase.auth.getUser()
-      console.log('[watchlist] user:', user, 'userError:', userError)
-      if (userError || !user) {
-        alert('Please sign in to add to watchlist')
-        setWatchlistLoading(false)
-        return
-      }
-
-      const payload = {
-        user_id:    user.id,
-        ticker:     decodedTicker,
-        name:       data.name,
-        price,
-        change,
-        change_pct: changePct,
-        added_at:   new Date().toISOString(),
-      }
-      console.log('[watchlist] inserting:', payload)
-
-      const { error: dbError } = await supabase.from('watchlist').upsert({
-        user_id:    user.id,
-        ticker:     decodedTicker,
-        name:       data.name,
-        price,
-        change,
-        change_pct: changePct,
-        added_at:   new Date().toISOString(),
-      }, { onConflict: 'user_id,ticker' })
-
-      if (dbError) {
-        alert(`DB Error:\ncode: ${dbError.code}\nmessage: ${dbError.message}\ndetails: ${dbError.details}\nhint: ${dbError.hint}`)
-        setWatchlistLoading(false)
+      const res = await fetch('/api/watchlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticker:    decodedTicker,
+          name:      data.name,
+          price,
+          change,
+          changePct,
+        }),
+      })
+      const result = await res.json()
+      if (!res.ok) {
+        alert(`Error: ${result.error}`)
         return
       }
       setWatchlisted(true)
     } catch (e: any) {
-      alert('Error: ' + JSON.stringify(e))
+      alert('Error: ' + e.message)
     } finally {
       setWatchlistLoading(false)
     }
